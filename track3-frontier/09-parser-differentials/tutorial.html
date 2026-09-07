@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 9 — Parser Differentials: the Sink Zoo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 3 · Module 9 of 11 · Frontier</p>
+  <h1>The Sink Zoo<em>seven ways a string becomes a tree</em></h1>
+  <p class="thesis">Track 2 studied one round trip. This module zooms out: a browser has
+  <b>at least seven</b> ways to turn a string into DOM, they disagree, and mutation XSS is
+  just the cell where a sanitizer used one and the app used another.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><code>&lt;noscript&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/noscript&gt;</code> is
+    <span class="hi">live</span> through <code>DOMParser</code> and
+    <code>template.innerHTML</code>, and <span class="hi">inert</span> through
+    <code>element.innerHTML</code>. The string didn't change. The sink did.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../track1-engine/01-foreign-content-fragment/tutorial.html">Module 1 · Fragment parsing</a>
+    <a class="tag" href="../../track2-mxss/04-mxss-noscript/tutorial.html">Module 4 · The scripting flag</a>
+    <a class="tag" href="../../../bob_browser_tokenization/modules/a3-security/tutorial.html">Tokenization · A3 (the mechanism, imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>One shipping manifest. Seven customs offices along the route, each with its own way of
+    reading it: the port office reads it as bonded cargo, the airport as air freight, the rail
+    depot ignores the "fragile" column entirely, the bonded warehouse treats every unlisted
+    item as duty-free, the border post applies quarantine rules the others don't. Same sheet
+    of paper. Whether a crate is "contraband" depends on <em>which office opened it</em>.
+    Kofi's shed and the warehouse next door reach different verdicts on the identical
+    manifest &mdash; and the smuggler routes through the pair that disagree.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The seven sinks</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Sink</th><th>Parse kind</th><th>Context</th><th>Scripting flag</th><th>Notable</th></tr></thead>
+    <tbody>
+      <tr><td><code>el.innerHTML = s</code></td><td>fragment</td><td>the element</td><td>ON</td><td>the classic sink</td></tr>
+      <tr><td><code>el.outerHTML = s</code></td><td>fragment</td><td>the element's <em>parent</em></td><td>ON</td><td>context is one level up &mdash; different insertion mode</td></tr>
+      <tr><td><code>new DOMParser().parseFromString(s,'text/html')</code></td><td>document</td><td>&mdash; (full <code>&lt;html&gt;&lt;body&gt;</code>)</td><td><strong>OFF</strong></td><td>the sanitizer's usual parser</td></tr>
+      <tr><td><code>range.createContextualFragment(s)</code></td><td>fragment</td><td>the range's start container</td><td>ON</td><td>context can be anything the range points into</td></tr>
+      <tr><td><code>template.innerHTML = s</code></td><td>fragment</td><td>the template</td><td><strong>OFF</strong></td><td>content model differs; also the sanitizer's usual parser</td></tr>
+      <tr><td><code>new XMLSerializer().serializeToString(node)</code></td><td>(serialize)</td><td>&mdash;</td><td>&mdash;</td><td>XML rules: <code>&lt;div/&gt;</code> self-closes, namespaces explicit &mdash; NOT §13.3</td></tr>
+      <tr><td><code>document.write(s)</code></td><td>document</td><td>into the open byte stream</td><td>ON</td><td>tokenizer state can be mid-tag; scripts run synchronously</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Mutation XSS = pick two rows with different scripting flags or contexts. Sanitizer uses
+  row 3 or 5. App uses row 1, 2, 4, or 7. Done.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">sinkDifferential('&lt;noscript&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/noscript&gt;')</span>
+    <pre class="tree">innerHTML (div, scripting on)   elements: [noscript]          live: false
+innerHTML (body, scripting on)  elements: [noscript]          live: false
+DOMParser (scripting off)       elements: [noscript, img]     <span class="new">live: true</span>
+template.innerHTML (off)        elements: [noscript, img]     <span class="new">live: true</span></pre>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <pre><code>export function sinkDifferential(html) {
+  return {
+    'innerHTML (div, on)':  parseFragment(html, 'div',      {scripting:true}),
+    'innerHTML (body, on)': parseFragment(html, 'body',     {scripting:true}),
+    'DOMParser (off)':      parseDocument(html,             {scripting:false}),
+    'template.innerHTML':   parseFragment(html, 'template', {scripting:false}),
+  };  <span class="c">// sinks 4 &amp; 7 (Range, document.write) are browser-only — see the table</span>
+}
+
+<span class="c">// xmlSerialize: XML rules, not HTML §13.3</span>
+s += inner ? `&gt;${inner}&lt;/${c.name}&gt;` : ' /&gt;';   <span class="y">// EVERY empty element self-closes</span></code></pre>
+  <p>Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant"><h4>Can't do yet</h4><ul>
+      <li>Model <code>Range.createContextualFragment</code> and <code>document.write</code> without a live browser</li>
+      <li>Cover every context×flag combination &mdash; the space is large</li>
+    </ul></div>
+    <div class="can"><h4>Can do</h4><ul>
+      <li>Show four modellable sinks disagreeing on the same string</li>
+      <li>Locate mutation XSS precisely: it's the (sanitizer sink, app sink) pairs that disagree</li>
+      <li>Show XML serialization producing <code>&lt;div/&gt;</code>, which HTML re-parses as an unclosed <code>&lt;div&gt;</code></li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track3-frontier\09-parser-differentials
+node test\demo.mjs</code></pre>
+    <span class="lab">Expected output</span>
+    <pre><code>MODULE 9 — Parser Differentials: the Sink Zoo
+
+  PASS  &lt;noscript&gt;&lt;img onerror&gt;: DOMParser (off) and innerHTML (on) disagree
+  PASS  the same string is "live" through one sink and not another
+  PASS  context matters: &lt;style&gt;x parses as text-holder in &lt;div&gt; vs element-holder in &lt;svg&gt;
+  PASS  XML serialization self-closes empty elements — &lt;div&gt;&lt;/div&gt; becomes &lt;div/&gt;
+  PASS  sinksDisagree flags a string where the model sinks diverge
+  PASS  mXSS is just one cell of this table: sanitizer-context vs sink-context
+
+  6 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch"><span class="ct">Getting a blank or broken result?</span>
+  <p><strong>All sinks agree on your test string</strong> &mdash; you picked a string with no
+  context-sensitive or flag-sensitive construct. Try one with <code>&lt;noscript&gt;</code>,
+  <code>&lt;svg&gt;&lt;style&gt;</code>, or a bare <code>&lt;td&gt;</code>.</p></div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>Your sanitizer uses <code>DOMParser</code> (sink 3). Your app renders with a
+    framework that uses <code>range.createContextualFragment</code> (sink 4) into a
+    <code>&lt;td&gt;</code>. Name a string that is safe through sink 3 and dangerous through
+    sink 4.</summary>
+    <p>Anything whose parse depends on being inside a table cell <em>and</em> on the scripting
+    flag. Sink 3 parses at document level, scripting off; sink 4 parses with context
+    <code>&lt;td&gt;</code> (so "in cell" insertion mode) and scripting on. A payload using
+    <code>&lt;noscript&gt;</code> gets the flag divergence; one using foster-parenting-shaped
+    markup (<code>&lt;table&gt;</code> tricks &mdash; see the Foster Parenting course) gets the
+    context divergence; combine them. The defence is the same as Module 8: don't rely on your
+    sanitizer's parse matching the sink's &mdash; forbid the constructs that diverge, and loop
+    to a fixed point so the <em>string</em> is stable regardless of who parses it.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: Is <code>outerHTML</code> really different from <code>innerHTML</code>?</div>
+    <div class="a">A: The parse context differs by one level (the parent, not the element), which
+    changes the insertion mode. For a <code>&lt;td&gt;</code>: <code>td.innerHTML</code> parses
+    "in cell"; <code>td.outerHTML</code> parses "in row". Different rules for the same string.</div></div>
+    <div class="qa-item"><div class="q">Q: Why does XML serialization matter for XSS?</div>
+    <div class="a">A: Code that does <code>new XMLSerializer().serializeToString(el)</code> then
+    feeds the result to <code>innerHTML</code> (a real pattern in XSLT and some editors) gets
+    <code>&lt;script/&gt;</code>-style self-closing tags that HTML re-parses as <em>unclosed</em>,
+    swallowing following content into the element &mdash; a structural mutation.</div></div>
+    <div class="qa-item"><div class="q">Q: Does the native Sanitizer API dodge all this?</div>
+    <div class="a">A: Largely yes &mdash; it parses once and hands you a node, no serialize step,
+    so there's no second sink to disagree. That's Module 11.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p><a href="../10-reading-disclosures/tutorial.html">Module 10</a> turns all of this into a
+  method: given a new mutation-XSS write-up, a repeatable way to find which parser rule, which
+  serializer rule, and which sanitizer assumption it exploited &mdash; applied to real
+  DOMPurify bypasses with their patch commits.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../../track2-mxss/08-hardened-sanitizer/tutorial.html">Module 8 · Hardened sanitizer</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../10-reading-disclosures/tutorial.html">Module 10 · Reading disclosures &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/sinks.mjs</code>. Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.
+  Citations: <a href="../../REFERENCES.md">REFERENCES.md</a> [R4], [S1].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. Sink divergence for
+  <code>&lt;noscript&gt;</code> verified against Chrome 148 (<code>DOMParser</code> vs live
+  <code>innerHTML</code>).</p>
+</div>
+
+</div>
+</body>
+</html>
