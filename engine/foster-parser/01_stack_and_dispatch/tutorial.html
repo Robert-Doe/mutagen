@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 01 · Stack & Dispatch Loop — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 01 · Build phase</p>
+  <h1>Stack &<em>Dispatch Loop</em></h1>
+  <p class="thesis">This module builds the engine's first <b>automatic</b> parser: a real HTML string goes in, a tokenizer and an insertion-mode dispatch loop drive it forward with no hand-holding, and we watch it correctly arrive at "in table" for the first time.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>A minimal tokenizer plus a six-mode dispatch loop (<code>initial</code> → <code>before html</code> → <code>before head</code> → <code>in head</code> → <code>after head</code> → <code>in body</code>) can walk <code>&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;head&gt;&lt;/head&gt;&lt;body&gt;hi&lt;table&gt;</code> and land on <span class="hi">mode "in table", current node table, stack html&gt;body&gt;table</span> — exactly what a real browser's parser state would be at that instant.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../../prerequisites/prereq_stack_of_open_elements.html">P3 · Stack of open elements</a>
+    <a class="tag" href="../../prerequisites/prereq_insertion_modes.html">P4 · Insertion modes</a>
+    <a class="tag" href="../00_tokens_and_nodes/tutorial.html">Module 00 · Tokens & node shape</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Module 00 built a filing cabinet (nodes) and a stack of labeled index cards (tokens), by hand, one card at a time. This module hires a clerk.</p>
+    <p>The clerk sits at one desk at a time — the insertion mode — and has a strict rulebook for that desk only. A card arrives (a token). The clerk checks the rulebook: does it say anything about this kind of card? If yes, follow it — maybe file something, maybe walk to a different desk and start following <em>that</em> desk's rulebook instead ("switch mode"), sometimes even re-reading the <em>same</em> card at the new desk because the old desk didn't know what to do with it ("reprocess").</p>
+    <p>If the rulebook at the current desk has nothing to say about this card, the clerk stops entirely rather than guessing — <strong>that's the "NotImplementedYet" boundary</strong> this module deliberately hits, right after correctly walking all the way to the table's front desk for the first time.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>tokenizer.js</code> scans the input string once, left to right, emitting the six token shapes from Module 00 — no lookahead beyond finding the next <code>&lt;</code>, <code>&gt;</code>, or matching quote.</li>
+      <li><code>createParserState()</code> creates an empty stack, an empty document, and sets <code>mode = 'initial'</code>.</li>
+      <li>Each token is handed to <code>dispatch(token, state)</code>, which looks up <code>MODES[state.mode]</code> and calls it.</li>
+      <li>A mode handler may: insert an element (push the stack), insert a character (fuse or create a <code>TextNode</code>), pop the stack, switch <code>state.mode</code>, and/or call <code>dispatch()</code> again to <strong>reprocess</strong> the same token under the new mode.</li>
+      <li>On the <code>&lt;table&gt;</code> start tag, <code>in body</code>'s handler inserts the <code>table</code> element, pushes it, and switches to <code>in table</code> — then returns without reprocessing (unlike the mode-switches before it, this one fully consumes the token).</li>
+      <li>The <em>next</em> token (<code>&lt;/table&gt;</code>'s end tag) is dispatched against <code>MODES['in table']</code>, which doesn't exist yet — <code>dispatch()</code> throws <code>NotImplementedYet</code>, and the demo catches it as the expected, deliberate stopping point.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>Mode transitions taken, in order</h4>
+      <ol class="stk">
+        <li><span>initial</span><span class="note">DOCTYPE consumed</span></li>
+        <li><span>before html</span><span class="note">&lt;html&gt;</span></li>
+        <li><span>before head</span><span class="note">&lt;head&gt;</span></li>
+        <li><span>in head</span><span class="note">&lt;/head&gt;</span></li>
+        <li><span>after head</span><span class="note">&lt;body&gt;</span></li>
+        <li class="tgt"><span>in body → in table</span><span class="note">&lt;table&gt;</span></li>
+      </ol>
+    </div>
+    <div class="railbox">
+      <h4>Stack &amp; tree at the stopping point</h4>
+      <pre class="tree">Stack: html &gt; body &gt; table
+
+#document
+└─ html
+   ├─ head
+   └─ body
+      ├─ <span class="new">#text "hi"</span>
+      └─ <span class="new">table</span>   <span class="caret">← current node</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The transition this whole module exists to demonstrate — note it does <em>not</em> call <code>dispatch()</code> again, unlike every mode-switch before it:</p>
+  <pre><code><span class="c">'in body'(token, state) {
+    if (token.type === 'Character') {
+      insertCharacter(state, token.data);
+      return;
+    }
+    if (token.type === 'StartTag' && token.tagName === 'table') {</span>
+      <span class="y">// This is the one transition Module 01 exists to prove: reaching "in table"
+      // for the first time. Everything "in table" actually does starts Module 02.
+      insertHtmlElement(state, token.tagName, token.attrs);
+      state.mode = 'in table';</span><span class="c">
+      return;
+    }
+    throw new NotImplementedYet('in body', token);
+  },</span></code></pre>
+  <p>And the bug this module's own test caught before this documentation could be written — the <code>initial</code> mode originally reprocessed <em>every</em> token, DOCTYPE included, cascading three implied elements before crashing:</p>
+  <pre><code><span class="c">initial(token, state) {
+    if (token.type === 'DOCTYPE') {</span>
+      <span class="y">// Real rules append a DocumentType node here... A DOCTYPE token is fully
+      // consumed by switching modes — it must NOT be reprocessed.</span><span class="c">
+      state.mode = 'before html';
+      return;
+    }
+    state.mode = 'before html';
+    dispatch(token, state);
+  },</span></code></pre>
+  <p>Full rationale, including why the tokenizer is regex-based rather than a full state machine, is in this module's <a href="DECISIONS.md">DECISIONS.md</a> — including a section on the bug above.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Do anything once <code>in table</code> mode is entered — no rules exist for it</li>
+        <li>Handle entities (<code>&amp;amp;</code>), RAWTEXT/RCDATA (<code>&lt;script&gt;</code>, <code>&lt;title&gt;</code>), or malformed markup recovery</li>
+        <li>Compute an adjusted insertion location — every insert is "after current node's last child," always</li>
+        <li>Track active formatting elements — that's Module 10</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Tokenize a real HTML string end to end for the well-formed subset this course uses</li>
+        <li>Walk six real insertion modes automatically, including implied-element insertion and token reprocessing</li>
+        <li>Correctly detect and report, with a specific typed error, exactly where its own capability ends</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/01_stack_and_dispatch
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Tokenized "&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;head&gt;&lt;/head&gt;&lt;body&gt;hi&lt;table&gt;&lt;/table&gt;&lt;/body&gt;&lt;/html&gt;" into 12 tokens ──
+
+── Parser state the moment "in table" was first reached ──
+mode: in table
+current node: table
+stack (bottom → top): html &gt; body &gt; table
+
+── Document tree built so far ──
+#document
+└─ html
+   ├─ head
+   └─ body
+      ├─ #text "hi"
+      └─ table
+
+── Stopped as expected on token #8 (EndTag table) ──
+Insertion mode "in table" has no rules yet in this engine (token: EndTag table). ...
+
+OK — all assertions passed. Module 01 dispatch loop verified.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If you see an assertion failure naming <code>state.mode</code> as something other than <code>'in table'</code>, you've likely reintroduced the DOCTYPE-reprocessing bug described in <a href="DECISIONS.md">DECISIONS.md</a> — check whether <code>initial</code>'s DOCTYPE branch still <code>return</code>s instead of calling <code>dispatch()</code>. If you get <code>Cannot find module '../../00_tokens_and_nodes/src/nodes.js'</code>, you're running the command from the wrong directory — <code>cd</code> into <code>track1-core/01_stack_and_dispatch</code> first.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The dispatch loop stops with a thrown error the moment it can't handle a token — it doesn't quietly skip the token and keep going. A "more forgiving" parser might catch the error internally and just ignore anything it doesn't understand. Why would that be a worse design for <em>this specific course</em>, even though real production parsers do have to tolerate malformed input somehow?</summary>
+    <p>Because this course's entire teaching method depends on every module's "what happens" being an exact, verified, assert-checked claim (see the project rule this course follows: "never fabricate a behavior claim you haven't verified"). If unhandled tokens were silently swallowed, a bug in a later module — say, a foster-parenting rule that's subtly wrong — could produce a tree that's <em>close enough</em> to correct that nobody notices, exactly the failure mode Module 00's FAQ warned about ("roughly right tree shapes are how foster-parenting bugs hide"). A loud, typed, specific error is a debugging tool built into the engine's architecture, not just error handling — real production parsers earn their tolerance for malformed input through the same kind of explicit, tested rule tables this course is building one module at a time; they don't get it by silently ignoring what they don't understand either.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why does <code>before html</code>'s "anything else" branch insert an <em>implied</em> <code>&lt;html&gt;</code> element instead of just erroring out, if the input didn't actually have an <code>&lt;html&gt;</code> tag?</summary>
+    <p>Because that's spec-accurate, and it's precisely the kind of "the parser builds a tree even from very odd input" behavior this whole course is about. Try opening a browser DevTools console on a page whose source is just <code>hello</code> with no tags at all — you'll still find <code>&lt;html&gt;&lt;head&gt;&lt;/head&gt;&lt;body&gt;hello&lt;/body&gt;&lt;/html&gt;</code> in the Elements panel. The parser never refuses to produce a tree; it fills in structure the source omitted. Module 01's <code>before html</code>/<code>before head</code> handlers reproduce exactly this.</p>
+  </details>
+
+  <details>
+    <summary>Why does the dispatch loop use a plain object (<code>MODES</code>) keyed by mode name instead of, say, a <code>switch</code> statement or a class per mode?</summary>
+    <p>A few reasons converge: it makes <code>MODES[state.mode]</code> a direct, O(1) lookup that mirrors how the spec itself is organized (one numbered section per insertion mode); it makes "this mode isn't implemented" a natural <code>undefined</code> check rather than a <code>switch</code>'s awkward default case; and it means each later module can add or replace exactly one property on this object without touching the dispatch mechanism itself — Module 02 will literally add a real <code>'in table'</code> entry to this same object.</p>
+  </details>
+
+  <details>
+    <summary>The tokenizer emits one <code>Character</code> token per character, matching Module 00's contract — but wasn't that going to be inefficient for long text runs?</summary>
+    <p>Yes, and this course's engine doesn't care, because it's optimized for spec-fidelity and explainability, not production performance (see <code>ROADMAP.md</code>'s explicit scope notes). A real browser's tokenizer is far more efficient internally, but its <em>observable contract with tree construction</em> is still fundamentally "characters arrive individually" — which is exactly why Module 08's "in table text" buffering behavior has to exist at all. Modeling the inefficient-but-accurate version is what makes that later module's lesson land.</p>
+  </details>
+
+  <details>
+    <summary>Why does <code>dispatch()</code> re-look-up <code>state.mode</code> on every single call, rather than a mode handler directly calling the next mode's function?</summary>
+    <p>Because "reprocess the token" (Prerequisite P4) means literally: re-run the tree-construction dispatcher from scratch against the *current* value of <code>state.mode</code>, which may have just changed. If a handler called another handler function directly instead of going through <code>dispatch()</code>, it would be bypassing the exact mechanism that makes "switch mode, then reprocess" a general, composable operation rather than a special case hand-wired between specific mode pairs.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 02 adds the first real entry for <code>'in table'</code> mode — but not its full rule set yet. Instead, it isolates the exact two-condition gate from the attached reference course's own Module 00 ("Two conditions, one gate"): is the foster-parenting flag enabled, <em>and</em> is the current node one of the five table-family elements? Module 02's demo will deliberately construct both a case where only one condition holds (and nothing happens) and a case where both hold (and a placeholder relocation fires), proving the gate's logic in isolation before Module 03 gives the flag itself a real lifecycle and Module 05 gives the relocation its real destination.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../00_tokens_and_nodes/tutorial.html">← Module 00 — Tokens & the DOM node shape</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../02_two_conditions_one_gate/tutorial.html">Module 02 — Two conditions, one gate →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/01_stack_and_dispatch/src/tokenizer.js</code>, <code>src/dispatch.js</code>, <code>src/parse.js</code>. Full rationale, including the DOCTYPE bug: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

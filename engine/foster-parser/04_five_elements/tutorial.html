@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 04 · Why Exactly Five Elements — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 04 · Build phase</p>
+  <h1>Why Exactly<em>Five Elements</em></h1>
+  <p class="thesis">Not four, not six. This module tests eleven table-related-or-not elements one at a time and shows the five-element list isn't a list to memorize — it falls out of one question, asked of each element: <b>"if a stray node landed here, would it have anywhere sensible to go?"</b></p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><span class="hi">table, tbody, thead, tfoot, tr</span> — and only those five, out of eleven tested — gate <code>isFosterParentingTarget()</code> true, exactly matching Module 02's <code>FOSTER_PARENT_TARGETS</code>, derived here element-by-element instead of asserted as a given.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../02_two_conditions_one_gate/tutorial.html">Module 02 · Two conditions, one gate</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Walk the whole building from Module 00's factory analogy, room by room, and ask the same question at every door: "if a piece of stray material got left here, is there a shelf?" Some rooms obviously have shelves — a cell (<code>&lt;td&gt;</code>) is built to hold things, so is a caption. Some rooms are pure hallway — no shelf anywhere, nothing to do with stray material but relocate it. The five that foster are exactly the pure hallways. Everything else either has a shelf, or (for two elements) never has the door open to begin with while security is on duty.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>TABLE_FAMILY_ATLAS</code> lists eleven elements: the five fosterers, three flow-content cells/captions that don't, two structurally-excluded near-misses (<code>colgroup</code>, <code>col</code>), and one unrelated control (<code>div</code>).</li>
+      <li>For each, <code>checkTarget(tag)</code> builds a minimal state with that element as the sole stack entry and the flag enabled, then asks Module 02's <code>isFosterParentingTarget()</code>.</li>
+      <li>The demo prints every row's predicted vs. actual result side by side with its reason, and asserts they match for all eleven.</li>
+      <li>It separately asserts the set of elements that actually returned <code>true</code> equals Module 02's <code>FOSTER_PARENT_TARGETS</code> exactly — five, no more, no fewer.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Element</th><th>Fosters?</th><th>Category</th></tr></thead>
+    <tbody>
+      <tr><td><code>table</code> <code>tbody</code> <code>thead</code> <code>tfoot</code> <code>tr</code></td><td class="yes">YES</td><td>No box of its own — pure corridor</td></tr>
+      <tr><td><code>td</code> <code>th</code> <code>caption</code></td><td class="no">no</td><td>Flow content — has a shelf</td></tr>
+      <tr><td><code>colgroup</code> <code>col</code></td><td class="no">no</td><td>Structurally excluded before the question ever applies</td></tr>
+      <tr><td><code>div</code></td><td class="no">no</td><td>Control — not table-related at all</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>One row from the atlas, showing the shape every entry shares:</p>
+  <pre><code><span class="c">{ tag: 'tr', fosters: true,</span>
+  <span class="y">reason: 'CSS display:table-row has no box of its own that isn\'t made of cells' },</span></code></pre>
+  <p>And the function that turns "current node is X" into a real, checkable answer without driving a full parse:</p>
+  <pre><code><span class="c">function checkTarget(tag) {
+  const state = {</span>
+    <span class="y">fosterParentingEnabled: true, stack: [new ElementNode(tag)]</span><span class="c">
+  };
+  return isFosterParentingTarget(state);
+}</span></code></pre>
+  <p>Why <code>colgroup</code> and <code>col</code>'s rows are honestly marked as "not yet mechanically enforced" rather than silently tested the same way as the other nine is explained in full in <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Actually reach <code>colgroup</code> or <code>col</code> as current node via a real parse — no "in column group" mode exists, and void elements aren't handled specially yet</li>
+        <li>Explain <em>where</em> a fostered node from any of the five actually lands — still Module 05</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Answer the gate question correctly for all eleven tested elements</li>
+        <li>Show the five-element list is derivable from one content-model question, not a memorized fact</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/04_five_elements
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run, truncated to fit — full table prints all 11 rows)</span>
+    <pre><code>── Testing every table-family element (and one control) as current node ──
+
+&lt;table&gt;      → true   OK        CSS display:table generates no box capable of holding non-table content
+&lt;tbody&gt;      → true   OK        CSS display:table-row-group has no box that isn't made of rows
+...
+&lt;div&gt;        → false  OK        not table-related at all — included as a control case
+
+Elements that foster: table, tbody, tfoot, thead, tr (5 of them)
+OK — all assertions passed. Module 04 five-element derivation verified.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>A <code>MISMATCH</code> row means <code>isFosterParentingTarget()</code>'s actual answer disagrees with the atlas's predicted <code>fosters</code> value — check whether Module 02's <code>FOSTER_PARENT_TARGETS</code> set was edited, since this module asserts against it directly rather than a separate hardcoded list.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The atlas includes <code>colgroup</code> and <code>col</code> with reasons this engine doesn't yet mechanically enforce. Suppose a future module (a real "in column group" mode) gets built and it turns out a bug lets <code>colgroup</code> become the current node while the flag is live. Would this module's test catch that regression?</summary>
+    <p>No — and that's worth sitting with. This module's <code>checkTarget()</code> constructs a synthetic state directly; it never asks "can a real parse actually put <code>colgroup</code> here?", only "if it were here, would the predicate say yes?" A regression in a future mode's rules that made <code>colgroup</code> reachable as current node would need a <em>different</em> test — one that drives the real dispatch loop — to catch. This is a real limitation of this module's approach, not a hidden guarantee; DECISIONS.md flags it explicitly rather than letting the green checkmarks imply more than they prove.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why not just trust Module 02's <code>FOSTER_PARENT_TARGETS</code> and skip this module entirely — isn't testing "does the Set contain what the Set contains" circular?</summary>
+    <p>It would be circular if this module tested the Set against itself. It doesn't — it tests the Set's <em>consequences</em> (what <code>isFosterParentingTarget()</code> actually returns for eleven real element names) against independently-stated <em>reasons</em> (CSS box generation, content models, spec mechanisms). The assertion that ties them together — "the elements that return true must equal the Set" — is the one place the two connect, and it's exactly the check that would fail if someone edited the Set to a wrong value without updating the reasoning, or vice versa.</p>
+  </details>
+
+  <details>
+    <summary>Why does <code>td</code> get "content model is flow content" as its reason, but <code>colgroup</code> gets a completely different kind of reason ("popped and reprocessed")? Aren't they both just "not one of the five"?</summary>
+    <p>They're both "not one of the five," but for categorically different reasons, and that distinction is the whole point of this module's atlas. <code>td</code> fails the test because <em>if</em> it were current node with the flag live, it would have somewhere sensible to put a stray node (it's flow content) — the gate correctly says no because condition 2 fails on its merits. <code>colgroup</code> fails differently: the spec's own rules never let it <em>become</em> current node while the flag could be live in the first place — a structural impossibility, not a content-model judgment. Track 1 Module 12 ("the containment atlas") is where this distinction gets its full name: seven different recovery tactics, of which FOSTER is only one.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Every module so far has proven <em>whether</em> foster parenting fires. Module 05 is the first to prove <em>where the node actually goes</em> — the seven substeps of the adjusted insertion location algorithm, including the nested-table case where a fostered node still ends up inside a table (just not the nearest one's row/section/cell structure), verified against real browser <code>DOMParser</code> output for the first time in this course.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../03_the_flag_lifetime/tutorial.html">← Module 03 — The flag lifetime</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../05_seven_substeps/tutorial.html">Module 05 — The seven substeps →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/04_five_elements/src/atlas.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 00 · Tokens & the DOM node shape — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 00 · Build phase</p>
+  <h1>Tokens &<em>Node Shape</em></h1>
+  <p class="thesis">Before a parser can decide <b>where</b> anything goes, it needs something to hold what it decides. This module builds the two data structures — tokens in, DOM nodes out — that every later module reads and writes.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>A hand-authored token stream for a small, ordinary (non-table) fragment can be represented exactly by <span class="hi">tokens.js</span>, and the DOM it describes can be built and rendered exactly by <span class="hi">nodes.js</span> — including the character-fusion behavior Module 09 will later depend on.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../../prerequisites/prereq_tokens.html">P1 · Tokens</a>
+    <a class="tag" href="../../prerequisites/prereq_dom_node_shape.html">P2 · DOM node shape</a>
+    <a class="tag" href="../../prerequisites/prereq_stack_of_open_elements.html">P3 · Stack of open elements</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Imagine a factory with two rooms. In the first room, an inspector walks along a conveyor belt of raw material and tags each piece with a label: "this is a doorframe," "this is a hinge," "this is a screw." That's the tokenizer — it never assembles anything, it just identifies and labels.</p>
+    <p>In the second room, an assembler takes those labeled pieces one at a time and decides where each one gets bolted onto the structure being built. That's tree construction, starting in Module 01.</p>
+    <p>This module builds neither room's <em>machinery</em> yet. It builds the <strong>shapes of the labels</strong> (tokens.js) and the <strong>shape of the structure being assembled</strong> (nodes.js) — the raw materials both rooms will pass back and forth. Get these two shapes wrong, and nothing built downstream can be trusted, no matter how correct the assembly logic is.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>tokens.js</code> defines six factory functions, one per token shape from <a class="tag" href="../../prerequisites/prereq_tokens.html">P1</a>: <code>doctypeToken</code>, <code>startTagToken</code>, <code>endTagToken</code>, <code>commentToken</code>, <code>characterToken</code>, <code>eofToken</code>.</li>
+      <li><code>characterToken()</code> is given a runtime guard: call it with anything other than a single character and it throws, rather than silently accepting a batched string.</li>
+      <li><code>nodes.js</code> defines four classes, one per node kind from <a class="tag" href="../../prerequisites/prereq_dom_node_shape.html">P2</a>: <code>DocumentNode</code>, <code>ElementNode</code>, <code>TextNode</code>, <code>CommentNode</code>.</li>
+      <li><code>insertNode(parent, node, index)</code> centralizes the one splice operation every future "insert a ___" algorithm will call.</li>
+      <li><code>tryFuseCharacter(parent, data, index)</code> checks whether the node immediately before the insertion point is already a <code>TextNode</code>, and if so appends to it instead of creating a new one.</li>
+      <li><code>test/demo.js</code> hand-authors a token stream for <code>&lt;div class="a"&gt;&lt;p&gt;hi &lt;b&gt;there&lt;/b&gt;&lt;/p&gt;&lt;/div&gt;</code>, builds the corresponding node tree using only these primitives, renders it, and asserts the result is exactly right.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>Token stream (input)</h4>
+      <pre class="tree">&lt;div class="a"&gt;
+&lt;p&gt;
+"h" "i" " "
+&lt;b&gt;
+"t" "h" "e" "r" "e"
+&lt;/b&gt;
+&lt;/p&gt;
+&lt;/div&gt;</pre>
+    </div>
+    <div class="railbox">
+      <h4>DOM built (output)</h4>
+      <pre class="tree">#document
+└─ div
+   └─ p
+      ├─ <span class="new">#text "hi "</span>   <span class="caret">← 3 tokens fused</span>
+      └─ b
+         └─ <span class="new">#text "there"</span>   <span class="caret">← 5 tokens fused</span></pre>
+    </div>
+  </div>
+  <p>Nine character tokens went in; two <code>TextNode</code>s came out. That compression is <code>tryFuseCharacter()</code> doing exactly what "insert a character" step 4 does in the real spec — proven here before Module 09 needs to explain why it matters under foster parenting.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The single-character guard on <code>characterToken()</code> — this is the line most likely to look like overkill until Module 08:</p>
+  <pre><code><span class="c">function characterToken(data) {
+  if (data.length !== 1) {
+    throw new RangeError(</span>
+      <span class="y">`characterToken() takes exactly one character, got ${JSON.stringify(data)} ` +
+      `(length ${data.length}). The tokenizer never batches characters into a token — ` +
+      'see prerequisites/prereq_tokens.html and Track 1 Module 08.'</span><span class="c">
+    );
+  }
+  return { type: 'Character', data };
+}</span></code></pre>
+  <p>And the fusion check that <code>test/demo.js</code> calls before every character insertion:</p>
+  <pre><code><span class="c">function tryFuseCharacter(parent, data, index = parent.children.length) {
+  const before = parent.children[index - 1];
+  if (before instanceof TextNode) {</span>
+    <span class="y">before.data += data;</span><span class="c">
+    return true;
+  }
+  return false;
+}</span></code></pre>
+  <p>Full rationale for every choice in both files — including why tokens are plain objects but nodes are classes, and why <code>attrs</code> is a <code>Map</code> — is in this module's <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Parse a real HTML string — there's no tokenizer, only hand-authored token arrays</li>
+        <li>Automatically decide where a node goes — <code>insertNode()</code> takes the location as an argument, it doesn't compute one</li>
+        <li>Track which element is "current" — no stack of open elements exists yet</li>
+        <li>Reproduce foster parenting, or any insertion-mode behavior — that starts Module 02</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Represent any token or node this course's engine will ever need</li>
+        <li>Splice a node into a parent at an arbitrary position</li>
+        <li>Fuse adjacent character insertions into one <code>TextNode</code></li>
+        <li>Render a subtree as the same ASCII diagram format used in every tutorial</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/00_tokens_and_nodes
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Token stream ──
+&lt;div class="a"&gt;
+&lt;p&gt;
+"h"
+"i"
+" "
+&lt;b&gt;
+"t"
+"h"
+"e"
+"r"
+"e"
+&lt;/b&gt;
+&lt;/p&gt;
+&lt;/div&gt;
+
+── Rendered tree ──
+#document
+└─ div
+   └─ p
+      ├─ #text "hi "
+      └─ b
+         └─ #text "there"
+
+OK — all assertions passed. Module 00 data structures verified.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>This module needs only Node.js (no npm install, zero dependencies). If you get <code>Cannot find module '../src/tokens.js'</code>, you're running the command from the wrong directory — <code>cd</code> into <code>track1-core/00_tokens_and_nodes</code> first, then run <code>node test/demo.js</code> with that relative path. If an assertion fails, you've likely edited <code>tryFuseCharacter</code> or <code>insertNode</code> — re-read <a href="DECISIONS.md">DECISIONS.md</a>'s rationale for the exact contract those two functions promise the rest of the course.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary><code>insertNode()</code> takes an explicit <code>index</code> parameter instead of always appending. Nothing in this module's demo ever passes a non-default index. Why build that flexibility in now, before any module needs it?</summary>
+    <p>Because Module 05 (the seven substeps of foster parenting) computes an adjusted insertion location that is very often <strong>not</strong> "after the last child" — it's "immediately before a specific existing sibling." If <code>insertNode()</code> could only append, Module 05 would have to reach past it and manipulate <code>.children</code> directly, defeating the whole point of centralizing the splice operation (see DECISIONS.md). This isn't speculative scope creep — it's the one piece of flexibility a concrete, already-scoped future module (05) is known to need, added at the layer where it's cheap, not invented for a "maybe."</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why does <code>nodes.js</code> use ES classes but <code>tokens.js</code> uses plain object factory functions? Isn't that inconsistent?</summary>
+    <p>It looks inconsistent until you compare lifecycles. A token is created, read once by tree construction, and thrown away — nothing about it ever needs to change, and nothing ever needs to ask "is this the same token as that one?" A node, by contrast, gets pushed onto the stack of open elements, popped, and — per the spec's own explicit warning (Prerequisite P3) — can still be mutated afterward through a stale reference. That needs stable identity and mutable state, which is what a class gives you and a plain object doesn't cleanly support. Different lifecycles, deliberately different representations.</p>
+  </details>
+
+  <details>
+    <summary>Why not just use the real DOM API (<code>document.createElement</code>, etc.) instead of writing our own node classes?</summary>
+    <p>Two reasons. First, this is a build-it-yourself course — using the browser's own tree construction to build a tree construction engine would prove nothing. Second, our nodes intentionally expose internals (a raw, mutable <code>.parent</code> pointer; a plain <code>.children</code> array you can splice directly) that the real DOM API deliberately hides behind methods like <code>appendChild</code>. Module 05 needs to insert a node <em>before a specific sibling that isn't necessarily the parent it's philosophically "inside"</em> — easier to reason about with raw access than through DOM's own insertion methods.</p>
+  </details>
+
+  <details>
+    <summary>Attributes are stored as a <code>Map</code>. Why not just use a plain JavaScript object, like <code>{ class: "a" }</code>?</summary>
+    <p>An attacker-influenced attribute name like <code>__proto__</code> collides with JavaScript's own prototype chain when used as a plain-object key, which is exactly the kind of subtle bug this course's Track 2 (mXSS) module cares about. <code>Map</code> has no such collision surface, and its API (<code>.get</code>/<code>.set</code>/<code>.entries()</code>) matches how the spec itself talks about an attribute list — as an ordered map.</p>
+  </details>
+
+  <details>
+    <summary>The demo's assertions check exact string equality against a hardcoded expected tree. Isn't that brittle?</summary>
+    <p>For this module, brittleness is the point. Module 00 exists to prove the data structures are correct for one concrete case, not to be a general-purpose test suite — later modules (05, 06, 10) add many more cases, each similarly asserted exactly, because "roughly right" tree shapes are exactly how foster-parenting bugs hide (see Module 07's "Watch it" callout later in the course, on the childless-form bug). Exact assertions now build the habit the whole course runs on.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 01 builds the piece this module deliberately left out: the stack of open elements (Prerequisite P3) as a live, mutating structure, plus a minimal insertion-mode dispatch loop that can drive the "in body" rules far enough to reach a <code>&lt;table&gt;</code> start tag for the first time. Nothing in Module 01 triggers foster parenting yet — that's still two modules away — but it's the first module where tokens actually get <em>consumed automatically</em> instead of hand-walked, which is the whole reason today's data structures needed to be right before we could trust anything built on top of them.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../../prerequisites/prereq_appropriate_place.html">← P5 — Appropriate place for inserting a node</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../01_stack_and_dispatch/tutorial.html">Module 01 — Stack & dispatch loop →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/00_tokens_and_nodes/src/tokens.js</code>, <code>src/nodes.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

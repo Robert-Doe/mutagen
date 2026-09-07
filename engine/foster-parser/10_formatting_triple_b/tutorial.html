@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 10 · Formatting Elements & the Triple &lt;b&gt; — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 10 · Build phase · The spec's own canonical example</p>
+  <h1>Formatting Elements &<em>the Triple &lt;b&gt;</em></h1>
+  <p class="thesis">This is where foster parenting stops being a local rule and starts interacting with the parser's other error-recovery machine. One <code>&lt;b&gt;</code> tag, one real spec example, <b>three separate <code>&lt;b&gt;</code> element objects</b> in the final tree.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><span class="hi">&lt;table&gt;&lt;b&gt;&lt;tr&gt;&lt;td&gt;aaa&lt;/td&gt;&lt;/tr&gt;bbb&lt;/table&gt;ccc</span> — the spec's own §13.2.10.3 example — produces three distinct <code>&lt;b&gt;</code> objects, verified by object-identity checks, matching real browser output exactly.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../09_text_fusion/tutorial.html">Module 09 · Text-node fusion</a>
+    <a class="tag" href="../../prerequisites/prereq_stack_of_open_elements.html">P3 · Stack of open elements</a>
+    <a class="tag" href="concept_how_they_connect.html">Vocabulary web: foster parenting vs. adoption agency vs. reconstruction vs. reparenting</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Formatting elements keep two independent records: a badge on the lanyard rack (the stack of open elements — "currently inside") and a name on the standing guest list (the active formatting elements list — "should be wrapped around whatever comes next"). Table-structural cleanup — the operation that clears the way for a new row — confiscates badges. It has no authority over the guest list; that's a completely different desk's job.</p>
+    <p>So when a name is still on the guest list but its badge got confiscated, the next time content shows up, the door staff dutifully mint a <em>fresh</em> badge for the same name. Not the same badge, reissued. A new one. And if it happens again, another new one.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>&lt;table&gt;</code> — ordinary insertion, mode switches to <code>in table</code>.</li>
+      <li><code>&lt;b&gt;</code> — unhandled in <code>in table</code>, so it falls to the anything-else fallback: fostered before the table, pushed onto BOTH the stack and the active-formatting list.</li>
+      <li><code>&lt;tr&gt;</code> — <code>clearStackBackToTableContext</code> pops the <code>&lt;b&gt;</code> off the stack. It stays on the list. Implied <code>&lt;tbody&gt;</code>, then <code>&lt;tr&gt;</code>.</li>
+      <li><code>&lt;td&gt;</code> — inserted, then a marker is pushed onto the formatting list.</li>
+      <li><code>"aaa"</code> — reconstruction runs but stops immediately: the list's last entry is the marker.</li>
+      <li><code>&lt;/td&gt;</code> — the list is cleared back to (and including) the marker, exposing the <code>&lt;b&gt;</code> entry again.</li>
+      <li><code>"bbb"</code> — buffered (Module 08), then flushed with fostering enabled. Reconstruction now finds <code>&lt;b&gt;</code> on the list but NOT on the stack → creates a brand-new <code>&lt;b&gt;</code>, itself fostered (current node is <code>tr</code>, a fostering target).</li>
+      <li><code>&lt;/table&gt;</code> — pops through the second <code>&lt;b&gt;</code> and the table; mode reverts to <code>in body</code>.</li>
+      <li><code>"ccc"</code> — reconstruction fires again → a THIRD <code>&lt;b&gt;</code>. Flag is off now (mode is plain <code>in body</code>), current node is <code>body</code>, so it's appended normally, right after the table.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">Output — three distinct &lt;b&gt; objects, none of them reused</span>
+    <pre class="tree">body
+├─ <span class="new">b</span>                 <span class="caret">← #1: fostered, then orphaned by clearing the stack</span>
+├─ <span class="new">b</span>
+│  └─ #text "bbb"   <span class="caret">← #2: reconstructed inside the table, fostered again</span>
+├─ table
+│  └─ tbody
+│     └─ tr
+│        └─ td
+│           └─ #text "aaa"
+└─ <span class="new">b</span>
+   └─ #text "ccc"   <span class="caret">← #3: reconstructed after &lt;/table&gt;, no longer fostered</span></pre>
+  </div>
+  <p>Same reconstruction call, invoked three completely different times, produces three completely different outcomes — entirely dictated by whatever the current node happens to be at each moment it fires.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The one line that makes reconstruction automatically inherit fostering, with no special-casing:</p>
+  <pre><code><span class="c">for (; i < list.length; i += 1) {
+  const entry = list[i];</span>
+  <span class="y">const clone = insertElementFn(state, entry.tagName, entry.attrs);</span><span class="c">  // same fn every module uses
+  list[i] = clone;
+}</span></code></pre>
+  <p>And the divergence itself — table cleanup touches only the stack, never the list:</p>
+  <pre><code><span class="c">function clearStackBackToTableContext(state) {
+  while (state.stack.length > 0 && !TABLE_CONTEXT_STOP_TAGS.has(currentNode(state).tagName)) {</span>
+    <span class="y">state.stack.pop();</span><span class="c">  // the list of active formatting elements is never touched here</span>
+  }
+}</code></pre>
+  <p>Full rationale, including why a narrow, targeted <code>&lt;/table&gt;</code>-closing rule had to be added specifically to reach the third <code>&lt;b&gt;</code>, is in <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Handle any formatting element besides <code>&lt;b&gt;</code> — the set is deliberately narrow</li>
+        <li>Bound reconstruction cost with the Noah's Ark clause (3+ duplicate entries)</li>
+        <li>Run the full adoption agency algorithm — only reconstruction and stack-clearing, its close relatives, are built here</li>
+        <li>Close a table in the general case — only the narrow rule this module's own test needed</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Reproduce the spec's own canonical triple-<code>&lt;b&gt;</code> example exactly, including three distinct object identities</li>
+        <li>Correctly skip reconstruction while inside a cell (via markers) and resume it once the cell closes</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/10_formatting_triple_b
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Output ──
+body
+  b
+  b
+    #text "bbb"
+  table
+    tbody
+      tr
+        td
+          #text "aaa"
+  b
+    #text "ccc"
+(stopped at token #20: EndTag body — expected; everything left only pops already-correct structure)
+
+Three distinct &lt;b&gt; objects confirmed: &lt;b&gt;&lt;/b&gt;, &lt;b&gt;bbb&lt;/b&gt;, &lt;b&gt;ccc&lt;/b&gt;
+
+OK — all assertions passed. Module 10 triple-&lt;b&gt; reconstruction verified against real browser output.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If only two <code>&lt;b&gt;</code> elements appear, check the <code>&lt;/table&gt;</code>-closing rule in <code>inBodyFosterAware10</code> — it must pop through the table regardless of what's on top of it (here, the second <code>&lt;b&gt;</code>), or the third reconstruction never gets a chance to fire.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise — the near-miss</h2></div>
+  <details>
+    <summary><code>&lt;b&gt;&lt;table&gt;foo&lt;/table&gt;&lt;/b&gt;</code> does NOT duplicate — work out why before reading on.</summary>
+    <p>Because there the <code>&lt;b&gt;</code> was opened <em>before</em> the table and is still on the stack when <code>foo</code> arrives — reconstruction's step 2 bails immediately (the list's last entry IS on the stack). The text is fostered directly into the existing <code>&lt;b&gt;</code>, giving <code>&lt;b&gt;foo&lt;table&gt;&lt;/table&gt;&lt;/b&gt;</code>. Duplication needs the stack/list divergence, and only "clear the stack back to a table context" manufactures it — a <code>&lt;b&gt;</code> that was never on the stack when clearing happened has nothing to diverge from.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why does clearing the stack leave the list untouched — wouldn't it be simpler for one operation to just clean up both?</summary>
+    <p>Because they answer different questions, for different consumers. The stack answers "what's currently open, structurally" — table cleanup cares about that and nothing else, since its whole job is getting the tree back to a sane table-structural state. The list answers "what formatting should wrap future content" — a question table cleanup was never asked and has no business answering. The bug (or rather, the deliberate design) is that nobody ELSE is responsible for reconciling the two after table cleanup runs — reconstruction just quietly re-derives what's missing, later, whenever it's next needed.</p>
+  </details>
+
+  <details>
+    <summary>The three &lt;b&gt; elements are three different JavaScript objects. Does the demo prove that, or just that the final tree looks like three &lt;b&gt; tags?</summary>
+    <p>It proves object identity directly — <code>assert.notEqual(bElements[0], bElements[1])</code> and the same for the second/third pair — not just that three <code>&lt;b&gt;</code>-tagged nodes exist in the serialized output. This matters for the same reason Module 09 insisted on <code>===</code> checks: a tree-shape match alone can't distinguish "three genuinely separate elements" from some hypothetical (and wrong) implementation that reused one object with cloned-looking siblings.</p>
+  </details>
+
+  <details>
+    <summary>Why did this module need to add a table-closing rule when three prior modules (05, 07, 08) all deliberately stopped short of building one?</summary>
+    <p>Because the third <code>&lt;b&gt;</code> — the whole point of the spec's canonical example — only exists on the far side of <code>&lt;/table&gt;</code> closing successfully. Modules 05, 07, and 08 each had complete, provable claims that didn't require going past that boundary; this module's claim (three DIFFERENT outcomes for reconstruction, one per position relative to the table) structurally requires reaching all three positions, including the one after the table is gone. DECISIONS.md is explicit that the rule added is narrow and targeted, not a general "close tables properly" — that's still future work.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 11 turns to three situations where "immediately before the table" is either wrong or impossible: a <code>&lt;template&gt;</code> intercepting fostered content into its own contents fragment, the fragment-parsing algorithm's inverted outcome for <code>element.innerHTML = '...'</code> versus parsing the same markup as a full document, and the detached-table case this course's engine has flagged as unverifiable against a real browser since Module 05. It's also where this engine finally gains a fifth node kind — <code>DocumentFragment</code> — deliberately deferred until now.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../09_text_fusion/tutorial.html">← Module 09 — Text-node fusion</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../11_templates_fragments/tutorial.html">Module 11 — Templates, fragments, detached tables →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/10_formatting_triple_b/src/formatting.js</code>, <code>src/dispatch10.js</code>, plus one additive parameter added to Module 08's <code>tabletext.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Vocabulary web for this module's easily-confused terms: <a href="concept_how_they_connect.html">concept_how_they_connect.html</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

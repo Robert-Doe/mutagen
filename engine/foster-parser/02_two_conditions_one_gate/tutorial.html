@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 02 · Two Conditions, One Gate — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 02 · Build phase</p>
+  <h1>Two Conditions,<em>One Gate</em></h1>
+  <p class="thesis">This module extracts the single predicate the whole course orbits — <b>flag enabled AND current node is table-family</b> — and proves it against a real 2×2 truth table, before either half of that condition has any machinery behind it.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><span class="hi">isFosterParentingTarget(state)</span> returns <code>true</code> for exactly one of four (flag, current-node) combinations — flag ON and current node table-family — and <code>false</code> for the other three, including a stack-empty edge case that doesn't throw.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../../prerequisites/prereq_appropriate_place.html">P5 · Appropriate place for inserting a node</a>
+    <a class="tag" href="../01_stack_and_dispatch/tutorial.html">Module 01 · Stack & dispatch loop</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>A door with an electronic lock that needs <em>two</em> separate signals to open — a keycard swipe AND a staff member's remote buzz-in — will not open for either one alone. Module 02 builds exactly that lock, and nothing else: no door mechanism yet (no relocation destination, Module 05), no wiring for when the buzzer signal turns on and off (Module 03's job). Just the lock's decision logic, tested by hand-feeding it every combination of "keycard swiped? yes/no" and "buzzer active? yes/no," confirming it only ever says "open" for exactly one of the four combinations.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>FOSTER_PARENT_TARGETS</code> is defined as a frozen <code>Set</code> of exactly five tag names: <code>table</code>, <code>tbody</code>, <code>tfoot</code>, <code>thead</code>, <code>tr</code>.</li>
+      <li><code>isFosterParentingTarget(state)</code> reads the current node off <code>state.stack</code> and checks two things: is <code>state.fosterParentingEnabled</code> truthy, and is the current node's tag name in the five-element set?</li>
+      <li>The demo first runs a real Module 01 parse up to <code>&lt;table&gt;</code>, proving the predicate can be exercised against genuine engine state.</li>
+      <li>It then runs all four (flag, tag) combinations by directly setting <code>state.fosterParentingEnabled</code> and swapping the top of the stack, and asserts the result matches <code>[false, true, false, false]</code> exactly.</li>
+      <li>It separately tests an empty stack (no current node), asserting the predicate degrades to <code>false</code> rather than throwing.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Flag enabled?</th><th>Current node is table-family?</th><th>Gate result</th></tr></thead>
+    <tbody>
+      <tr><td class="no">false</td><td class="no">no (e.g. <code>&lt;td&gt;</code>)</td><td class="no">false</td></tr>
+      <tr><td class="no">false</td><td class="yes">yes (e.g. <code>&lt;table&gt;</code>)</td><td class="no">false</td></tr>
+      <tr><td class="yes">true</td><td class="no">no (e.g. <code>&lt;td&gt;</code>)</td><td class="no">false</td></tr>
+      <tr><td class="yes">true</td><td class="yes">yes (e.g. <code>&lt;table&gt;</code>)</td><td class="yes">TRUE</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Only the bottom row gates. This is the entire truth table the attached reference course's Module 00 states in one sentence: <em>"Either condition alone does nothing. ... Both, and only both, trigger relocation."</em></p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The whole module, in one function:</p>
+  <pre><code><span class="c">function isFosterParentingTarget(state) {
+  const target = state.stack[state.stack.length - 1];
+  return (</span>
+    <span class="y">Boolean(state.fosterParentingEnabled) &&
+    Boolean(target) &&
+    FOSTER_PARENT_TARGETS.has(target.tagName)</span><span class="c">
+  );
+}</span></code></pre>
+  <p>Note what's <em>absent</em>: no <code>if (result) { relocate... }</code>, no code that ever sets <code>fosterParentingEnabled</code> itself. This function only ever answers the yes/no question — see <a href="DECISIONS.md">DECISIONS.md</a> for why keeping it a pure predicate, with no side effects, is the central design decision of this module.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Automatically turn <code>fosterParentingEnabled</code> on or off — it's set by hand in this module's demo</li>
+        <li>Actually relocate a node anywhere — no destination algorithm exists until Module 05</li>
+        <li>Reach a real <code>&lt;td&gt;</code> current node via the dispatch loop — "in cell" mode isn't implemented, so the demo swaps the stack directly instead</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly answer the gate question for any (flag, current node) combination, including the empty-stack edge case</li>
+        <li>Serve as the one predicate every later module's "should this fire?" check calls, unchanged</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/02_two_conditions_one_gate
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Real Module 01 engine state reached ──
+current node: table | mode: in table
+
+── Truth table: isFosterParentingTarget(flag, currentNode) ──
+flag OFF, current node is &lt;table&gt;  → false
+flag ON,  current node is &lt;table&gt;  → true
+flag OFF, current node is &lt;td&gt;     → false
+flag ON,  current node is &lt;td&gt;     → false
+
+Empty-stack edge case (flag ON, no current node) → false (no throw)
+
+OK — all assertions passed. Module 02 two-condition gate verified.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If <code>require('../../01_stack_and_dispatch/src/tokenizer.js')</code> fails, check you haven't moved or renamed Module 01's directory — Module 02 deliberately imports Module 01's files unchanged rather than duplicating them (see DECISIONS.md). If the truth table doesn't match <code>[false, true, false, false]</code>, check <code>FOSTER_PARENT_TARGETS</code> still contains exactly the five names, case-sensitively lowercase.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>Prerequisite P3 asked you to restate condition 2 in terms of the stack: is it about the stack's <em>contents</em>, or specifically its <em>top</em>? Now that you've seen <code>isFosterParentingTarget()</code>'s source, what's the answer — and what would change if it were the other one?</summary>
+    <p>It's specifically the top — <code>state.stack[state.stack.length - 1]</code>, the current node, and nothing else. If it checked the stack's full <em>contents</em> instead (e.g. "is there a table-family element anywhere in the stack"), then Module 02's own demo would break: being deep inside a table but with current node <code>&lt;td&gt;</code> would incorrectly gate true, contradicting the attached reference course's own "Watch it" callout in its Module 02: <em>"Being in a table is not the test... you can be deep inside a table and not foster (you're in a cell)."</em> The empty-stack edge case this module tests only makes sense under the "top of stack" reading too — under a "contents" reading, an empty stack and a stack with no table-family member would be indistinguishable failure modes for a different reason.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why is the demo's truth table only 4 rows plus 1 edge case, instead of testing all five table-family tag names individually?</summary>
+    <p>Because <code>isFosterParentingTarget()</code> doesn't distinguish between the five — it only asks Set membership, which is a single code path regardless of which of the five matched. Testing <code>table</code> and <code>td</code> (a representative "yes" and a representative "no") exercises that code path completely; testing all five would be five assertions with zero additional branch coverage. Track 1 Module 04 ("why exactly five elements") is where the five get tested individually — there, the point <em>is</em> to examine each one.</p>
+  </details>
+
+  <details>
+    <summary>The predicate reads <code>state.fosterParentingEnabled</code>, but nothing in this module ever sets it during real parsing — only the demo does, by hand. Doesn't that mean the gate is currently dead code?</summary>
+    <p>Within this module alone, yes — and that's intentional, not an oversight. Module 02's whole purpose is to build and verify the gate's logic in isolation, before Module 03 wires up the only real trigger for the flag (the "in table" mode's anything-else clause) and before Module 05 gives a true "gate open" event anywhere to go. Each module proves one thing; "is this predicate correct" and "is this predicate ever called for real" are different claims, proven in different modules.</p>
+  </details>
+
+  <details>
+    <summary>Why <code>Boolean(state.fosterParentingEnabled)</code> instead of just <code>state.fosterParentingEnabled</code> directly in the <code>&&</code> chain?</summary>
+    <p>Cosmetic, not functional — JavaScript's <code>&&</code> would short-circuit correctly either way. It's here so the function's return value is guaranteed to be a real boolean (<code>true</code>/<code>false</code>) rather than possibly returning <code>undefined</code> (if <code>fosterParentingEnabled</code> was never set) or the target object itself. Given this predicate is asserted against with <code>assert.deepEqual(results, [false, true, false, false], ...)</code>, a stray <code>undefined</code> instead of <code>false</code> would fail that assertion — better to make the contract explicit in the source than rely on the test to paper over it.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 03 gives <code>fosterParentingEnabled</code> the real lifecycle it doesn't have yet: wired into the dispatch loop's actual <code>in table</code> "anything else" clause, turned on immediately before one token is processed under <code>in body</code>'s rules, and turned back off immediately after — never surviving past the single token that raised it. The truth table this module proved stays exactly the same; Module 03's job is only to make the flag's left-hand column (ON/OFF) something the engine decides automatically, instead of something the demo sets by hand.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../01_stack_and_dispatch/tutorial.html">← Module 01 — Stack & dispatch loop</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../03_the_flag_lifetime/tutorial.html">Module 03 — The flag lifetime →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/02_two_conditions_one_gate/src/foster.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

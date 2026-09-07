@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 07 · What Refuses to Be Fostered — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 07 · Build phase</p>
+  <h1>What Refuses<em>to Be Fostered</em></h1>
+  <p class="thesis">Five token shapes reach <code>in table</code> and never make it to the anything-else fallback at all. This module builds all five — and one deliberate near-miss that <b>does</b> reach the fallback, producing a real, well-documented bug.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><span class="hi">&lt;table&gt;&lt;form&gt;&lt;input name=x&gt;&lt;/form&gt;&lt;/table&gt;</span> produces a permanently empty <code>&lt;form&gt;</code> and an <code>&lt;input&gt;</code> fostered clean outside the table — the exact tree shape behind a real, commonly-reported "why is my form empty" bug.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../05_seven_substeps/tutorial.html">Module 05 · The seven substeps</a>
+    <a class="tag" href="../03_the_flag_lifetime/tutorial.html">Module 03 · The flag lifetime</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Not every unexpected arrival gets walked to the gate. Some have their own standing instructions posted right at the door: the mail (<code>&lt;style&gt;</code>/<code>&lt;script&gt;</code>) gets set on the front table without question. A courier with a hidden-delivery slip (<code>&lt;input type=hidden&gt;</code>) drops the package and leaves immediately — nobody escorts them anywhere, they just weren't staying. A visiting official with a clipboard (<code>&lt;form&gt;</code>) checks in, gets logged, and is shown straight back out — before anyone they were supposed to bring in with them even reaches the door.</p>
+    <p>That last one is the trap: the official's own guest (a following <code>&lt;input&gt;</code>) arrives <em>after</em> the official has already left, finds no escort waiting, and gets walked to the gate like anyone else unexpected.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>inTableRefusesFostering(token, state)</code> checks, in order: is this <code>&lt;style&gt;</code>/<code>&lt;script&gt;</code>/<code>&lt;template&gt;</code> (start or end tag)? A hidden <code>&lt;input&gt;</code>? A <code>&lt;form&gt;</code>? A comment? A DOCTYPE?</li>
+      <li>Each matched case is inserted (or, for DOCTYPE, simply ignored) and the function returns <code>true</code> — signaling "handled, do not foster."</li>
+      <li>An <code>&lt;input&gt;</code> whose <code>type</code> is anything other than <code>hidden</code> — including no <code>type</code> at all — is explicitly left unmatched, returning <code>false</code>.</li>
+      <li><code>dispatch7</code> checks this function FIRST, before Module 05's <code>&lt;td&gt;</code>/<code>&lt;th&gt;</code>/<code>&lt;tr&gt;</code> rules and before the anything-else/foster-parenting fallback.</li>
+      <li>For the childless-form case: <code>&lt;form&gt;</code> is inserted then immediately popped. The current node reverts to <code>table</code> right away — so the very next token, the nested <code>&lt;input&gt;</code>, is evaluated against a table-family current node, and (having no <code>type=hidden</code>) falls straight through to fostering.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">Input — visually, input LOOKS like it's inside form</span>
+    <pre><code>&lt;table&gt;&lt;form&gt;&lt;input name=x&gt;&lt;/form&gt;&lt;/table&gt;</code></pre>
+    <span class="lab">Output — it never was</span>
+    <pre class="tree">body
+├─ <span class="new">input</span>   <span class="caret">← fostered, NOT inside form</span>
+└─ table
+   └─ form   <span class="caret">← permanently empty</span></pre>
+  </div>
+  <p>Nothing in the source markup looks wrong. The bug is entirely in when <code>form</code> stops being the current node — one token before its own child ever arrives.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The two lines that create the trap:</p>
+  <pre><code><span class="c">if (token.type === 'StartTag' && token.tagName === 'form') {
+  insertHtmlElement(state, token.tagName, token.attrs);</span>
+  <span class="y">state.stack.pop(); // childless, permanently</span><span class="c">
+  return true;
+}</span></code></pre>
+  <p>And the branch that makes the trap spring — note it's the ONE case in this whole function that returns <code>false</code>:</p>
+  <pre><code><span class="c">if (token.type === 'StartTag' && token.tagName === 'input') {
+  const type = (token.attrs.get('type') || '').toLowerCase();
+  if (type === 'hidden') { </span><span class="c">/* ...pop, return true... */</span><span class="c"> }</span>
+  <span class="y">return false; // any other type, or none: falls through to fostering</span><span class="c">
+}</span></code></pre>
+  <p>Full rationale for every branch, plus why <code>&lt;style&gt;</code>'s content tokenizing correctly here is a coincidence of the test input rather than a general guarantee, is in <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Tokenize <code>&lt;style&gt;</code>/<code>&lt;script&gt;</code> content correctly if it contains a literal <code>&lt;</code> — no RAWTEXT tokenizer state</li>
+        <li>Reject a second nested <code>&lt;form&gt;</code> — no form element pointer modeled</li>
+        <li>Represent form-association in the DOM sense — <code>ElementNode</code> has no such field</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly intercept five distinct token shapes before the fostering fallback ever sees them</li>
+        <li>Reproduce the exact tree shape of the childless-form bug, byte-for-byte against a real browser</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/07_what_refuses
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run, abridged — full run prints all six cases)</span>
+    <pre><code>── The childless-form bug: &lt;form&gt; ends up empty inside the table; its own &lt;input&gt; is fostered OUTSIDE it ──
+body
+  input
+  table
+    form
+
+OK — all assertions passed. Module 07 "what refuses to be fostered" verified against real browser output.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If the hidden-input test shows <code>x</code> trapped inside <code>&lt;input&gt;</code> instead of fostered before the table, check that <code>state.stack.pop()</code> still runs immediately after inserting a hidden input — that pop is the entire point of that test case (see DECISIONS.md).</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>Of the five things this module handles specially, exactly one — the ordinary (non-hidden) <code>&lt;input&gt;</code> — is defined by <code>inTableRefusesFostering</code> returning <code>false</code>. Why does that one case matter more to this module's overall point than the four that return <code>true</code>?</summary>
+    <p>Because a module titled "what refuses to be fostered" that only ever showed things being refused would leave the boundary of that refusal invisible. The one <code>false</code> case is what proves the other four aren't refusing fostering by some blanket "anything inside &lt;form&gt; or near &lt;input&gt; is safe" rule — they're refusing it for five completely independent, specific reasons, and stepping one tag outside any of those five reasons (a plain <code>&lt;input&gt;</code>, or an <code>&lt;input&gt;</code> that arrives after its guardian <code>&lt;form&gt;</code> already left) drops straight back into the ordinary fostering behavior every module since 02 has been building. The childless-form bug only exists because that boundary is real and sharp, not fuzzy.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Is the childless-form bug this module reproduces an engine limitation, or genuine browser behavior?</summary>
+    <p>Genuine browser behavior — verified directly against a real browser's <code>DOMParser</code> before this engine was tested against the same input (see DECISIONS.md and the module's real-output comparison). This isn't a case where our simplified engine diverges from a real parser; it's a case where our simplified engine <em>correctly reproduces</em> a widely-encountered, real-world parsing quirk. The attached reference course calls it "the parser's single most reliable source of 'why is my form empty' bug reports" for exactly this reason.</p>
+  </details>
+
+  <details>
+    <summary>Why does <code>inTableRefusesFostering</code> check <code>type</code> case-insensitively (<code>.toLowerCase()</code>) but nothing else in this module bothers with case normalization?</summary>
+    <p>Because that specific case-insensitivity is called out explicitly in the real spec's wording for this exact clause — the attached reference course's own containment table states it as "ASCII-case-insensitively matching hidden." Tag names elsewhere in this engine are already lowercased by the tokenizer itself (Module 01's <code>tokenizer.js</code> lowercases every tag name it emits), so no other comparison in this file needs its own normalization — this one is different because it's comparing an <em>attribute value</em>, which the tokenizer has no reason to touch.</p>
+  </details>
+
+  <details>
+    <summary>Why test the DOCTYPE-mid-table case by calling <code>inTableRefusesFostering</code> directly instead of running it through the real tokenizer and full engine like every other case in this module?</summary>
+    <p>Because a second DOCTYPE appearing partway through a document is markup no realistic input produces — constructing a full, tokenizable HTML string containing one would test this engine's tokenizer's DOCTYPE-anywhere behavior more than it would test this module's actual claim (that the token, once produced, is correctly ignored). Calling the function directly with a hand-built token isolates exactly the thing being proven, the same technique Module 02's truth table and Module 04's atlas both used for similar reasons.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 08 returns to character tokens — but not one at a time. It builds "in table text" mode: the buffered-run, all-or-nothing decision that determines whether a stretch of whitespace-heavy text stays inside the table or gets fostered out along with a single non-whitespace character hiding among it. It's the module that finally explains why this course's engine emits one character token per character (Prerequisite P1) instead of batching them — Module 08 is where that granularity actually gets used for something.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../06_what_gets_fostered/tutorial.html">← Module 06 — What gets fostered</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../08_in_table_text/tutorial.html">Module 08 — "in table text" & the whitespace trap →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/07_what_refuses/src/nonfoster.js</code>, <code>src/dispatch7.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

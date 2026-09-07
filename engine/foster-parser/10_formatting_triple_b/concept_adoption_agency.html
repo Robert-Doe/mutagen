@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept · The Adoption Agency Algorithm — vocabulary web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Vocabulary web · Module 10 · Term 2 of 4</p>
+  <h1>The Adoption<em>Agency Algorithm</em></h1>
+  <p class="thesis">The parser's fix for <b>misnested</b> formatting elements — <code>&lt;b&gt;&lt;i&gt;x&lt;/b&gt;y&lt;/i&gt;</code>-shaped input. A much bigger algorithm than this course builds; only its last step ever touches foster parenting.</p>
+</header>
+
+<section class="mod">
+  <div class="analogy">
+    <p>Two wristbands, put on in one order, someone tries to take them off in the <em>other</em> order. The adoption agency algorithm is the process for sorting that out — finding where the tangle happened, cutting the right band, and re-issuing the pieces in a shape that makes sense. It is not the same process as security walking an unexpected arrival to the gate (<a href="concept_foster_parenting.html">foster parenting</a>) — it's a much more involved untangling, of which relocation is only the final step.</p>
+  </div>
+
+  <div class="spec">
+    <p><strong>What it's for:</strong> an end tag (like <code>&lt;/b&gt;</code>) whose matching start tag is buried under other, still-open elements, rather than being the current node.</p>
+    <p><strong>What this course builds:</strong> nothing of the algorithm itself, through Module 13 — it was out of scope for the original 00–13 roadmap. <strong>That boundary has since been crossed</strong>: <a href="../14_adoption_agency/tutorial.html">Module 14</a> builds and verifies the full algorithm, added to the course specifically to cover it, including a dedicated treatment of how it fits into "how the parser handles malformed HTML" generally. This page now stays as the vocabulary-web term-disambiguation entry — start at Module 14 for the real mechanism.</p>
+    <p><strong>The one point of contact with this course's subject:</strong> the algorithm's final relocation step inserts its result at "appropriate place for inserting a node" (Prerequisite P5) — the exact same algorithm foster parenting lives inside — using a computed <var>common ancestor</var> as an <em>override target</em>. If that override target happens to be table-family and the flag is live, the relocation fosters. Henri Sivonen's 2008 observation (see <code>REFERENCES.md</code>): on inspection, this isn't a special case at all — it's foster parenting as usual, just reached from a different algorithm. Module 14's own Case 3 (a <code>&lt;table&gt;</code> misnested inside a <code>&lt;b&gt;</code>) verifies exactly this composition against a real browser.</p>
+  </div>
+
+  <div class="callout crazy">
+    <span class="ct">The confused pair</span>
+    <p>"Adoption agency" and "foster parenting" share adoption/parenting-family vocabulary that <em>invites</em> conflation, and both really do relocate nodes — but one is a large, general misnesting-repair algorithm that occasionally happens to end in a foster-parenting-shaped move, and the other is a tiny, specific two-condition gate. Treating them as synonyms, or as two names for the same mechanism, is the single most common mix-up this vocabulary web exists to head off.</p>
+  </div>
+
+  <div class="callout brain">
+    <span class="ct">How this connects</span>
+    <p>Reaches <a href="concept_foster_parenting.html">foster parenting</a> only through its last step's override target. Shares no mechanism with <a href="concept_reconstruction.html">reconstruction</a> — they're siblings under the active-formatting-elements list, not the same operation (reconstruction re-creates missing elements; adoption agency untangles misnested ones). Shares nothing but a naming collision with <a href="concept_reparenting_dom_api.html">DOM reparenting</a>.</p>
+  </div>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="concept_foster_parenting.html">← Foster parenting</a></span>
+  <span class="next"><span class="dir">Next</span><a href="concept_reconstruction.html">Reconstruct the active formatting elements →</a></span>
+</div>
+<p style="margin-top:20px"><a href="concept_how_they_connect.html" style="font-family:var(--mono);font-size:13px;color:var(--pen)">↩ Back to the hub: how all four terms connect</a></p>
+
+</div>
+</body>
+</html>

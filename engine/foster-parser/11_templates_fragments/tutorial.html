@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 11 · Templates, Fragments, Detached Tables — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 11 · Build phase · A fifth node kind, finally</p>
+  <h1>Templates, Fragments,<em>Detached Tables</em></h1>
+  <p class="thesis">Three situations where "immediately before the table" is either wrong or impossible — and the module where this engine's two-bug track record continues: one gap fixed, one honestly routed around instead of silently ignored.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><span class="hi">table.innerHTML = '&lt;p&gt;x&lt;/p&gt;'</span> puts <code>&lt;p&gt;</code> INSIDE the table; parsing <code>&lt;table&gt;&lt;p&gt;x&lt;/p&gt;&lt;/table&gt;</code> as a document puts it OUTSIDE. Same markup. Opposite outcome. "Where does a <code>&lt;p&gt;</code> in a table end up?" has no answer until you say how it got there.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../05_seven_substeps/tutorial.html">Module 05 · The seven substeps</a>
+    <a class="tag" href="../00_tokens_and_nodes/tutorial.html">Module 00 · Tokens & node shape</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>A <code>&lt;template&gt;</code> is a building with its own separate, disconnected basement — content addressed to it never joins the main structure's rooms at all; it goes straight into the basement, which isn't part of the building tour. Fragment parsing (<code>innerHTML</code>) is a stranger scenario still: it's a full security review happening in a pop-up tent outside the real estate, with a fresh, empty gate structure that was never actually attached to anything — so "escort this to the estate's edge" has nowhere real to go, and instead lands at the edge of the <em>tent</em>.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>DocumentFragmentNode</code> is added to <code>nodes.js</code> (Module 00), additively — the fifth node kind, deferred until exactly this point.</li>
+      <li><code>getAdjustedInsertionLocation11</code> completes Module 05's algorithm: substep 1 (a template deeper on the stack than the last table redirects straight to its contents) and the outer, unconditional "if the result lands inside a template, redirect" check.</li>
+      <li><code>&lt;template&gt;</code> itself is intercepted before any mode routing — inserted ordinarily (never fostered, per Module 07), immediately given a fresh <code>.content</code> fragment.</li>
+      <li><code>parseFragment(html, 'table')</code> seeds a fresh <code>&lt;html&gt;</code> root, sets mode to <code>in table</code> directly (skipping the document-level mode walk), and returns the root's children — exactly what a real <code>innerHTML</code> assignment installs.</li>
+      <li>Two real bugs surface along the way — see "The Code, Explained" and <a href="DECISIONS.md">DECISIONS.md</a> for both.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">Same markup, two routes, opposite results</span>
+    <pre><code><span class="c">// parsed as a document</span>
+&lt;table&gt;&lt;p&gt;x&lt;/p&gt;&lt;/table&gt;
+<span class="g">→ &lt;p&gt;x&lt;/p&gt;&lt;table&gt;&lt;/table&gt;</span>      <span class="c">// p OUTSIDE</span>
+
+<span class="c">// set via innerHTML on the table</span>
+table.innerHTML = <span class="y">'&lt;p&gt;x&lt;/p&gt;'</span>;
+<span class="g">→ &lt;table&gt;&lt;p&gt;x&lt;/p&gt;&lt;/table&gt;</span>      <span class="c">// p INSIDE</span></code></pre>
+  </div>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained — two real bugs</h2></div>
+  <p><strong>Bug 1, fixed:</strong> implied <code>&lt;tbody&gt;</code>/<code>&lt;tr&gt;</code> insertion (reused from Module 05) called Module 01's plain inserter, which has no idea a <code>&lt;template&gt;</code> might be the current node:</p>
+  <pre><code><span class="c">// before (Module 05's version, reused unchanged — the bug):</span>
+insertHtmlElement(state, 'tbody');  <span class="r">// writes straight into .children, ignores .content</span>
+
+<span class="c">// after (this module's fix):</span>
+<span class="y">insertElementAtAppropriatePlace11(state, 'tbody');</span>  <span class="c">// includes the template redirect</span></code></pre>
+  <p><strong>Bug 2, routed around, not fixed:</strong> a bare <code>&lt;tr&gt;</code> inside a <code>&lt;template&gt;</code> needs a real spec mechanism this engine doesn't build (the <code>in template</code> mode's per-tag mode-dispatch shortcuts). Rather than build it for one test case, the test was changed to a tag (<code>&lt;tbody&gt;</code>) that doesn't trigger the gap — verified against a real browser first:</p>
+  <pre><code><span class="c">// avoided: &lt;table&gt;&lt;template&gt;&lt;tr&gt;FOO&lt;/template&gt;&lt;/table&gt;
+// used instead — same substep-1 mechanism, no implied-wrapper mismatch:</span>
+&lt;table&gt;&lt;template&gt;&lt;tbody&gt;FOO&lt;/template&gt;&lt;/table&gt;</code></pre>
+  <p>Full rationale for both is in <a href="DECISIONS.md">DECISIONS.md</a> — including exactly why Bug 1 counts as a real bug in Module 05's original reasoning, not just a new limitation.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Handle a bare <code>&lt;tr&gt;</code>/<code>&lt;td&gt;</code>/<code>&lt;th&gt;</code> immediately inside a <code>&lt;template&gt;</code> correctly (needs the <code>in template</code> mode's mode-dispatch stack)</li>
+        <li>Parse a fragment with context <code>'tbody'</code>/<code>'tr'</code>/other table-family contexts — only <code>'table'</code> is verified</li>
+        <li>Verify the detached-table substeps (6–7) against a real browser — unchanged limitation from Module 05</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Reproduce the innerHTML-vs-document-parse inversion exactly</li>
+        <li>Genuinely exercise substep 4 (the fragment case) via a real <code>innerHTML</code>-equivalent call, not just a synthetic state</li>
+        <li>Redirect fostered content into a <code>&lt;template&gt;</code>'s contents, including when the fostering-eligible current node is nested inside it</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/11_templates_fragments
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run, Case 1 shown)</span>
+    <pre><code>── Case 1: the same markup, two routes, opposite results ──
+Parsed as a document: &lt;table&gt;&lt;p&gt;x&lt;/p&gt;&lt;/table&gt;
+body
+  p
+    #text "x"
+  table
+
+Set via table.innerHTML = '&lt;p&gt;x&lt;/p&gt;':
+table
+  p
+    #text "x"
+
+Same markup. Opposite outcome. "Where does a &lt;p&gt; in a table end up?" has no answer until you
+say how it got there.
+
+OK — all assertions passed. Module 11 templates/fragments/substep-1/substep-4 verified against real browser output.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If Case 4 shows an extra <code>&lt;tbody&gt;</code> wrapper inside the template's content, you've reintroduced a bare <code>&lt;tr&gt;</code> test case — see Bug 2 in <a href="DECISIONS.md">DECISIONS.md</a> for why that specific input isn't supported yet.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>Bug 1 was fixed; Bug 2 was routed around instead. What's the principled difference — why not fix both, or route around both?</summary>
+    <p>Bug 1 was a gap in logic this engine already had all the pieces for — <code>insertElementAtAppropriatePlace11</code> already existed and already did the right thing; the fix was routing an existing call through the existing correct function instead of a stale one. Bug 2 requires a genuinely new mechanism (a template-insertion-modes stack, an <code>in template</code> mode with its own per-tag dispatch table) that no module has built any piece of yet — building it for one test case would be exactly the kind of scope creep this course's engineering conventions warn against. The test between "fix it" and "route around it, honestly" is whether the fix is assembling existing pieces correctly, or inventing a new piece that nothing else needs yet.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why does <code>parseFragment</code> seed the stack with a fresh <code>&lt;html&gt;</code> element instead of the context element itself (e.g. an actual <code>&lt;table&gt;</code>)?</summary>
+    <p>Because that's what the real spec does — and it's exactly why substep 4 (Case 2) can fire at all. If the context element itself were pushed, "is there a table on the stack" would trivially always be true for a table-context fragment, and substep 4 could never be reached. The context element only ever influences which insertion MODE gets selected initially; it's never itself part of the stack, which is precisely the gap substep 4 exists to handle.</p>
+  </details>
+
+  <details>
+    <summary>Case 2's assertion expects <code>FOO</code> as a sibling of <code>&lt;tbody&gt;</code>, not inside the empty <code>&lt;tr&gt;</code>. Why would anyone expect it inside the <code>&lt;tr&gt;</code> in the first place?</summary>
+    <p>Because that's the naive, plausible-sounding guess: "FOO comes right after &lt;tr&gt; in the source, so it must go inside the most recently opened thing." But current node determines destination, not source proximity — and current node right before FOO arrives is <code>&lt;tr&gt;</code>, which IS a fostering target (Module 04). With no table anywhere on the stack (substep 4's precondition), FOO fosters to the fragment root level instead, landing beside — not inside — the row it looks adjacent to in the markup.</p>
+  </details>
+
+  <details>
+    <summary>The DocumentFragmentNode addition to nodes.js is described as "deferred exactly as long as Module 00 predicted." Was that actually planned, or is this explaining after the fact?</summary>
+    <p>It was actually planned — Module 00's own <code>DECISIONS.md</code>, written back before Module 01 existed, states verbatim: "If a later module needs <code>DocumentFragment</code> (Module 11, for template contents), it will be added there rather than speculatively here." This module is that prediction being fulfilled, not a retroactive justification — worth checking directly rather than taking on faith, since this course's whole premise is that claims should be checkable.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 12 steps back from building new mechanisms and instead maps everything this engine (and the real spec) does when content doesn't fit where it landed — seven distinct recovery tactics in total, of which foster parenting, built across Modules 02–11, is only one. It's the module that finally answers, element by element, which of the seven applies to <code>&lt;p&gt;</code>, <code>&lt;li&gt;</code>, <code>&lt;a&gt;</code>, <code>&lt;select&gt;</code>, and everything else this course hasn't specifically built a rule for.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../10_formatting_triple_b/tutorial.html">← Module 10 — Formatting elements & the triple &lt;b&gt;</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../12_containment_atlas/tutorial.html">Module 12 — The containment atlas →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/11_templates_fragments/src/location11.js</code>, <code>src/dispatch11.js</code>, <code>src/fragment.js</code>, plus one additive node kind added to Module 00's <code>nodes.js</code>. Full rationale, including both bugs: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

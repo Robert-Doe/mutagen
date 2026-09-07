@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 14 · The Adoption Agency Algorithm — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 14 · Added after Track 1's original close, by request</p>
+  <h1>The Adoption<em>Agency Algorithm</em></h1>
+  <p class="thesis">The spec's repair machinery for misnested formatting elements — <code>&lt;b&gt;&lt;i&gt;x&lt;/b&gt;y&lt;/i&gt;</code>-shaped input — built and verified for real this time, after Module 10 drew a line around it and called it out of scope. This module exists specifically to answer a question every prior module dodged: <strong>what does the parser actually do when the HTML is wrong?</strong></p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>Browsers never reject malformed HTML. There is no such thing as an HTML syntax error a browser refuses to render. <code>&lt;b&gt;&lt;i&gt;x&lt;/b&gt;y&lt;/i&gt;</code> — a document where the tags don't nest, which by XML's rules isn't even well-formed — produces a <span class="hi">specific, deterministic, spec-mandated tree</span>, the same tree in every conformant browser, built by exactly this algorithm.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../10_formatting_triple_b/tutorial.html">Module 10 · Active formatting elements & the triple &lt;b&gt;</a>
+    <a class="tag" href="../13_scope/tutorial.html">Module 13 · Scope & why table is a wall</a>
+    <a class="tag" href="../../prerequisites/prereq_appropriate_place.html">P5 · Appropriate place for inserting a node</a>
+    <a class="tag" href="../10_formatting_triple_b/concept_adoption_agency.html">Vocabulary web · Adoption agency (the boundary Module 10 drew — now crossed)</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Two wristbands, put on in one order — <code>&lt;b&gt;</code>, then <code>&lt;i&gt;</code> — someone tries to take them off in the <em>other</em> order: <code>&lt;/b&gt;</code> arrives first. You can't just cut the outer band; the inner one is looped through it. The adoption agency algorithm is the security guard's actual procedure for this exact tangle: find where the crossing happened, decide how much needs to be cut and re-tied, and re-issue new bands in a shape that makes sense — without ever just refusing to let the person leave. <strong>That last part is the whole point of this module.</strong> A real browser has no "reject and stop" button. Whatever bytes arrive, however tangled, it must produce <em>some</em> tree, and — since 2008 — a tree every other browser produces too.</p>
+  </div>
+
+  <div class="callout brain">
+    <span class="ct">Why this is a bigger deal than it sounds</span>
+    <p>Before the WHATWG HTML5 effort (roughly 2004–2008), "what does a browser do with broken HTML" had no single answer — it had one answer <em>per browser</em>, sometimes per browser <em>version</em>, reverse-engineered by trial and error by anyone who needed to match it. The same malformed markup could render as three different trees in three different browsers, and site authors learned to write markup that "happened to work" in whichever browser they tested against — a major, quietly-load-bearing source of real interoperability bugs for over a decade. Ian Hickson's HTML5 tree-construction algorithm — including this one, its single most intricate piece — is a from-scratch, exhaustive specification of exactly how to recover from <em>every</em> class of malformed input, written by studying what browsers already did and forcing convergence on one answer. It is not a "nice to have" cleanup pass. It is the reason "view source" on almost any real website — full of unclosed tags, misordered elements, and decades of copy-pasted markup — renders identically everywhere at all.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step — Reading Malformed Input</h2></div>
+  <div class="spec">
+    <p>Walk <code>&lt;b&gt;1&lt;i&gt;2&lt;/b&gt;3&lt;/i&gt;4</code> — Case 1 below — through the algorithm exactly as the parser does. This <em>is</em> "how the parser handles malformed HTML," made concrete:</p>
+    <ol>
+      <li><strong>The tag-nesting violation itself.</strong> By the time <code>&lt;/b&gt;</code> arrives, the stack is <code>html &gt; body &gt; b &gt; i</code> — <code>&lt;i&gt;</code> opened <em>after</em> <code>&lt;b&gt;</code> and is still open. <code>&lt;/b&gt;</code> does not match the current node (<code>i</code>). This is the malformed shape: an end tag whose start tag is buried, not on top.</li>
+      <li><strong>Find the formatting element.</strong> Search the active formatting elements list, back to front, for an entry named <code>b</code>. Found — this confirms a <code>&lt;b&gt;</code> really is open somewhere, not just missing entirely (a separate, unrelated kind of "wrong").</li>
+      <li><strong>Is it actually reachable, in scope?</strong> If the search hit a scope boundary first (Module 13), the end tag is simply <em>ignored</em> — a different, much cheaper recovery than anything this module builds. Not the case here.</li>
+      <li><strong>Look for a furthest block</strong> — a "special category" element (Module 14's own new list: div, table, p, and dozens more) sitting <em>above</em> <code>b</code> on the stack. In this case: none. <code>i</code> is a formatting element too, not special-category.</li>
+      <li><strong>No furthest block found → the cheap path.</strong> Pop everything down to and including <code>b</code>, drop it from the active formatting list, done. No cloning, no relocation — the "untangling" turned out to be a plain pop once the actual stack shape was checked. <strong>This is the single most common misconception about this algorithm: the textbook <code>&lt;b&gt;/&lt;i&gt;</code> overlap almost everyone uses to introduce it doesn't exercise the famous cloning machinery at all.</strong></li>
+    </ol>
+    <p>Case 2 (a <code>&lt;div&gt;</code> misnested inside <code>&lt;b&gt;</code>) hits step 4 differently: <code>div</code> <em>is</em> special-category, so a furthest block is found, and the full clone-and-relocate machinery — steps 5 onward, the "outer loop"/"inner loop" the spec names — actually runs. That's what makes this the hardest recovery algorithm in the spec: most malformed input takes the cheap exit; only genuinely tangled structural misnesting reaches the expensive one.</p>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">Input — a &lt;div&gt; misnested inside a &lt;b&gt;, itself misnested inside another &lt;div&gt;</span>
+    <pre><code>&lt;div id="outer"&gt;&lt;b&gt;bold&lt;div id="inner"&gt;block&lt;/b&gt;after&lt;/div&gt;more&lt;/div&gt;</code></pre>
+    <span class="lab">Output — real browser DOMParser, verified twice against a parentElement-labeled serializer</span>
+    <pre class="tree">body
+└─ div#outer
+   ├─ b
+   │  └─ #text "bold"          <span class="caret">← the ORIGINAL &lt;b&gt;, left behind on the outside</span>
+   ├─ div#inner
+   │  ├─ b
+   │  │  └─ #text "block"      <span class="caret">← a CLONE of &lt;b&gt;, carrying div#inner's own content</span>
+   │  └─ #text "after"
+   └─ #text "more"</pre>
+  </div>
+  <p>Two distinct <code>&lt;b&gt;</code> elements exist in the final tree — not one element magically present in two places, not a parse error that just drops the tag. The original stays wrapped around "bold"; a brand-new clone gets built and threaded around "block", inside <code>div#inner</code>, on the far side of the misnesting. This is the algorithm's whole purpose in one picture: turn markup where a formatting tag's start and end straddle a structural boundary into a tree where formatting is applied on <em>both sides</em> of that boundary, correctly, by <em>duplicating</em> the formatting element rather than moving it whole.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The "cheap path" from Section 02 — most malformed input never leaves this branch:</p>
+  <pre><code><span class="c">if (!furthestBlock) {</span>
+  <span class="y">log('no-furthest-block');
+  while (state.stack.length && state.stack[state.stack.length - 1] !== formattingElement) {
+    state.stack.pop();
+  }
+  state.stack.pop();               // pop the formatting element itself
+  const idx = list.indexOf(formattingElement);
+  if (idx !== -1) list.splice(idx, 1);
+  return;</span><span class="c">
+}</span></code></pre>
+  <p>The expensive path's most important single line — the one this module's build got wrong on the first attempt, verified against parse5's real source rather than a too-literal reading of spec prose (see <a href="DECISIONS.md">DECISIONS.md</a> for the full corrective story):</p>
+  <pre><code><span class="c">state.stack.splice(feStackIndex2, 1);           // remove the old formatting element
+const fbIndex = state.stack.indexOf(furthestBlock);</span>
+<span class="y">state.stack.splice(fbIndex + 1, 0, feClone);    // clone goes AFTER furthestBlock — becomes new current node</span></code></pre>
+  <p>Getting this backwards — inserting <em>before</em> <code>furthestBlock</code> instead of after — doesn't crash. It produces a tree that looks almost right, then quietly re-finds the same <code>furthestBlock</code> on the next pass through the outer loop and clones it again. And again. Up to the spec's own 8-iteration safety cap. <strong>This is itself a small lesson in malformed-input handling: the algorithm that recovers from malformed HTML has its own internal guard rail (the outer loop's hard 8-pass limit) against recovering from malformed HTML forever.</strong> Even the fix-it code is defensively bounded.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>The Noah's Ark clause proper (Module 10's un-built cousin) — this module's <code>&gt;3</code> pruning branch is implemented but only lightly exercised; none of the three test cases misnest deep enough to trigger it</li>
+        <li>MathML/SVG-namespaced formatting elements interacting with this algorithm — no namespace tracking, consistent since Module 00</li>
+        <li>Multiple simultaneous misnested formatting elements resolving in a single call (each end tag triggers one independent run)</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly distinguish the "cheap" (no furthest block) and "expensive" (clone-and-relocate) recovery paths, end to end through the real engine</li>
+        <li>Correctly compose cloning with foster parenting when the misnested element is table-family — zero special-casing between the two mechanisms</li>
+        <li>Terminate correctly within the spec's 8-iteration cap, verified against a real reproduction of the runaway-cloning bug this module's own build hit and fixed</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/14_adoption_agency
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Case 1: &lt;b&gt;1&lt;i&gt;2&lt;/b&gt;3&lt;/i&gt;4 — the "no furthest block" path (plain pop, no cloning) ──
+body
+  b
+    #text "1"
+    i
+      #text "2"
+  i
+    #text "3"
+  #text "4"
+log: no-furthest-block → no-furthest-block
+
+── Case 2: a structural element (&lt;div&gt;) misnested inside &lt;b&gt; — full clone-and-relocate ──
+body
+  div#outer
+    b
+      #text "bold"
+    div#inner
+      b
+        #text "block"
+      #text "after"
+    #text "more"
+log: cloning → no-furthest-block
+
+── Case 3: a &lt;table&gt; misnested inside &lt;b&gt; — cloning meets foster parenting ──
+body
+  b
+    #text "boldaftermore"
+    table
+log: enable → disable → formatting-element-not-in-scope → enable → disable
+
+OK — all assertions passed. Track 1 Module 14 adoption agency algorithm verified against real browser output.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting 8 nested clones instead of 1?</span>
+    <p>That's the exact bug this module's own build hit — the new formatting-element clone was being inserted <em>before</em> <code>furthestBlock</code> in the stack instead of <em>after</em> it, so the next outer-loop pass kept re-finding the same furthest block and re-cloning. Check the stack-splice index in Section 04 above.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise — malformed input, predict the recovery path</h2></div>
+  <p>For each snippet: does it take the cheap "no furthest block" exit, or the full clone-and-relocate path? Predict before revealing.</p>
+
+  <details>
+    <summary>1. <code>&lt;p&gt;&lt;b&gt;bold&lt;/p&gt;normal</code> — a formatting element left open across a <code>&lt;/p&gt;</code></summary>
+    <p>This calls the adoption agency for <code>&lt;/p&gt;</code>, not <code>&lt;/b&gt;</code> — <code>p</code> isn't a formatting element, so it never reaches this algorithm at all; it's handled by the ordinary "generate implied end tags" machinery this course's engine doesn't implement (Module 13's own noted limit). A genuinely different kind of malformed-input recovery, worth knowing this algorithm does <em>not</em> cover it.</p>
+  </details>
+
+  <details>
+    <summary>2. <code>&lt;b&gt;&lt;b&gt;&lt;b&gt;x&lt;/b&gt;&lt;/b&gt;&lt;/b&gt;</code> — three nested, then three closes, in order</summary>
+    <p>Not malformed at all — every end tag matches the current node exactly. Never reaches the adoption agency's outer loop past its very first "is current node an exact match" fast-path check.</p>
+  </details>
+
+  <details>
+    <summary>3. <code>&lt;table&gt;&lt;b&gt;bold&lt;/table&gt;&lt;/b&gt;after</code> — end tag arrives AFTER the table already auto-closed</summary>
+    <p><strong>Cheap exit</strong> — by the time <code>&lt;/b&gt;</code> arrives, nothing structural sits between <code>b</code> and the top of the stack (the table-closing machinery already popped past it), so no furthest block is found. Different from this module's own Case 3, where the table is still open when <code>&lt;/b&gt;</code> arrives.</p>
+  </details>
+
+  <details>
+    <summary>4. <code>&lt;b&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;x&lt;/b&gt;</code> — three structural elements piled up before the mismatched close</summary>
+    <p><strong>Full clone-and-relocate</strong> — the innermost <code>div</code> found first (nearest the top of the stack) above <code>b</code> is the furthest block, exactly one level deep from <code>b</code>, regardless of how many more structural elements sit above it.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Is this really "how the parser handles malformed HTML," or just one narrow piece of it?</summary>
+    <p>One (very complex) piece of a much larger toolkit — Module 12's containment atlas already named seven recovery tactics total (FOSTER, CLOSE, IGNORE, POP+REPROCESS, REDIRECT, MERGE, and ADOPTION AGENCY), each answering a different shape of "the markup doesn't say what to do here." Foster parenting recovers from content landing where a table can't hold it. Scope (Module 13) recovers from an end tag reaching for something it structurally can't touch. This module recovers from formatting-element tags whose start and end straddle a structural boundary — genuinely the most involved of the seven, which is exactly why it was the one piece the original course scope left out. But it's one entry in a larger, already-mapped system, not the whole story by itself.</p>
+  </details>
+
+  <details>
+    <summary>Why doesn't the parser just... stop, or throw an error, when it sees markup like this?</summary>
+    <p>Because an HTML parser's actual job, since the HTML5 effort standardized it, is to consume <em>any</em> byte stream and produce <em>a</em> tree — never to validate. There is no such thing in the spec as a fatal HTML parse error; every single error condition names a specific, deterministic recovery action, and this algorithm is simply the recovery action for one specific condition. This is a deliberate, load-bearing design choice, not an oversight: the web has decades of markup that was never valid to begin with, and "refuse to render broken pages" was never a viable option for a document format with this much legacy content depending on graceful, convergent recovery.</p>
+  </details>
+
+  <details>
+    <summary>Real browsers ship an implementation far more complex than this module's ~200 lines. What's actually missing?</summary>
+    <p>Mainly the Noah's Ark clause in full (Module 10's still-unbuilt bound on the active formatting elements list), namespace-aware handling for MathML/SVG formatting elements, and the "generate implied end tags" step this module's own inner loop leans on but Module 13 already flagged as not implemented. None of these change the <em>shape</em> of the algorithm demonstrated here — they're additional edge-case coverage on top of the same three-branch (trivial-pop / no-furthest-block / cloning) structure this module builds and verifies.</p>
+  </details>
+
+  <details>
+    <summary>The build for this module hit three real bugs and two self-caught test mistakes. Doesn't that undercut confidence in the result?</summary>
+    <p>The opposite, if the process is visible — which is why <a href="DECISIONS.md">DECISIONS.md</a> documents every one of them in full rather than presenting a clean-looking final version. Every claim in this tutorial is backed by output re-verified against a real browser using an unambiguous serializer, after two earlier misreadings of that same real output were caught and corrected. That is what "we verify, we don't assume" is supposed to look like when the subject is actually hard — not a promise that mistakes won't happen, but a discipline for catching them before they ship.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>This closes the last algorithm this course's Track 1 deliberately left on the table. If you came here from the vocabulary web's <a href="../10_formatting_triple_b/concept_adoption_agency.html">adoption agency concept page</a>, that page has been updated to point back here now that the boundary it drew has been crossed. If you want the security angle — what this algorithm's cloning behavior means for a sanitizer that assumes tags stay where the source string put them — Track 2's <a href="../../track2-mxss/02_naive_sanitizer_break/tutorial.html">Module T2-02</a> is the closest existing material, though it predates this module and doesn't specifically target adoption-agency-shaped payloads.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../13_scope/tutorial.html">← Module 13 — Scope & why table is a wall</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../10_formatting_triple_b/concept_adoption_agency.html">Vocabulary web — the concept page this module completes →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/14_adoption_agency/src/special_category.js</code>, <code>src/location_override.js</code>, <code>src/adoption_agency.js</code>, <code>src/dispatch14.js</code>. Full rationale, including three real bugs found and fixed during this module's own build: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>. Added to the course after Track 1's original 00–13 close, by explicit request.</p>
+</div>
+
+</div>
+</body>
+</html>

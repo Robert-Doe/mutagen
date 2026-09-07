@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hub · Foster Parenting vs. Adoption Agency vs. Reconstruction vs. Reparenting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Vocabulary web hub · Module 10</p>
+  <h1>How They<em>Connect</em></h1>
+  <p class="thesis">Four terms, one shared vocabulary of "moving nodes around," and almost no shared mechanism. This page is the map — read the four linked pages for depth, come back here for the overview.</p>
+
+  <ol class="toc">
+    <li><span class="n">1</span><a href="concept_foster_parenting.html">Foster parenting</a></li>
+    <li><span class="n">2</span><a href="concept_adoption_agency.html">The adoption agency algorithm</a></li>
+    <li><span class="n">3</span><a href="concept_reconstruction.html">Reconstruct the active formatting elements</a></li>
+    <li><span class="n">4</span><a href="concept_reparenting_dom_api.html">DOM "reparenting" (the impostor)</a></li>
+  </ol>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">A</span><h2>Definitions, side by side</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Term</th><th>What it is</th><th>When it runs</th><th>Can it foster a node?</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><a href="concept_foster_parenting.html">Foster parenting</a></td>
+        <td>A parser flag + a relocation destination algorithm</td>
+        <td>Tree construction, one token at a time</td>
+        <td class="yes">IS the mechanism</td>
+      </tr>
+      <tr>
+        <td><a href="concept_adoption_agency.html">Adoption agency</a></td>
+        <td>A large misnested-formatting-element repair algorithm</td>
+        <td>Tree construction, on certain end tags</td>
+        <td class="yes">Indirectly — its last step can trigger it</td>
+      </tr>
+      <tr>
+        <td><a href="concept_reconstruction.html">Reconstruction</a></td>
+        <td>A routine check + re-creation of missing formatting elements</td>
+        <td>Tree construction, before many insertions</td>
+        <td class="yes">Indirectly — inherits it from the insertion function it calls</td>
+      </tr>
+      <tr>
+        <td><a href="concept_reparenting_dom_api.html">DOM "reparenting"</a></td>
+        <td>Ordinary DOM mutation methods (<code>appendChild</code>, etc.)</td>
+        <td>Any time, unrelated to parsing</td>
+        <td class="no">No — parsing isn't involved at all</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">B</span><h2>Where each one lives, visually</h2></div>
+  <div class="spec">
+    <pre class="tree">TREE CONSTRUCTION (while parsing a source string)
+│
+├─ Module 05: "appropriate place for inserting a node"
+│    │
+│    └─ step 2 check → <span class="mark">FOSTER PARENTING</span>  (the flag + destination algorithm)
+│         ▲                                        ▲
+│         │ (last step's override target)          │ (every recreated element
+│         │                                         │  routes through here)
+│    <span class="mark">ADOPTION AGENCY</span>                          <span class="mark">RECONSTRUCTION</span>
+│    (misnested end tags)                    (missing formatting elements)
+│
+▼
+(parsing finishes — document exists)
+│
+▼
+RUNTIME, ANY TIME LATER
+│
+└─ <span class="mark">DOM "REPARENTING"</span>  (appendChild, moveBefore, ...) — no connection upward at all</pre>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">C</span><h2>Commonly confused pairs</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>The wrong statement</th><th>The correction</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>"Foster parenting and the adoption agency algorithm are two names for the same thing."</td>
+        <td>No — the adoption agency is a much larger algorithm for fixing misnested formatting-element end tags; foster parenting is a small two-condition gate. They only ever meet at one point: the adoption agency's final relocation step can, incidentally, trigger fostering.</td>
+      </tr>
+      <tr>
+        <td>"Reconstruction repairs a tree that got broken."</td>
+        <td>No — reconstruction runs routinely on nearly every relevant insertion and does nothing most of the time (step 2's early exit). It isn't a repair mode; it's a constant, cheap check that occasionally finds real work to do.</td>
+      </tr>
+      <tr>
+        <td>"The parser reparents the &lt;b&gt; element when the table clears the stack."</td>
+        <td>No — clearing the stack only pops the element off the STACK. Nothing "reparents" it anywhere; it stays exactly where it already was in the tree, orphaned only from the stack's bookkeeping. The NEW &lt;b&gt; that shows up later is a freshly created element, not the old one moved.</td>
+      </tr>
+      <tr>
+        <td>"React/Vue 'reparenting' a component and the HTML parser's foster parenting are related concepts."</td>
+        <td>No — framework "reparenting" (moving a live DOM node with <code>appendChild</code>/<code>moveBefore</code> to preserve component state) happens at runtime, on an already-parsed document, using ordinary DOM methods. Tree construction is not involved and the term's use in both contexts is a naming coincidence, not a shared mechanism.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">D</span><h2>Scenario-matching quiz</h2></div>
+  <p>For each scenario, name which ONE of the four terms is responsible before revealing the answer.</p>
+
+  <details>
+    <summary>A page calls <code>document.getElementById('a').appendChild(document.getElementById('b'))</code> in a <code>&lt;script&gt;</code> tag, moving an already-rendered element.</summary>
+    <p><strong>DOM "reparenting"</strong> — ordinary DOM mutation, long after parsing finished. None of the other three terms are running at this point at all.</p>
+  </details>
+
+  <details>
+    <summary><code>&lt;table&gt;&lt;p&gt;x&lt;/p&gt;&lt;/table&gt;</code> — the <code>&lt;p&gt;</code> ends up as a sibling before the table.</summary>
+    <p><strong>Foster parenting</strong> — a plain, unhandled start tag hits <code>in table</code>'s anything-else fallback, current node is <code>table</code>, both gate conditions hold.</p>
+  </details>
+
+  <details>
+    <summary><code>&lt;a href=1&gt;x&lt;a href=2&gt;y&lt;/a&gt;</code> — the second <code>&lt;a&gt;</code> implicitly closes the first, in a way that isn't a simple stack pop.</summary>
+    <p><strong>The adoption agency algorithm</strong> — repeated/misnested <code>&lt;a&gt;</code> tags are one of the algorithm's classic trigger cases (alongside <code>&lt;nobr&gt;</code>).</p>
+  </details>
+
+  <details>
+    <summary><code>&lt;table&gt;&lt;b&gt;&lt;tr&gt;&lt;td&gt;aaa&lt;/td&gt;&lt;/tr&gt;bbb&lt;/table&gt;ccc</code> — the second <code>&lt;b&gt;</code> appears with no corresponding start tag anywhere near it in the source.</summary>
+    <p><strong>Reconstruction</strong> — the active-formatting list still has the (stack-orphaned) first <code>&lt;b&gt;</code>'s entry; reconstruction creates a fresh element for it. (It then ALSO gets fostered, since current node is <code>tr</code> — two of the four terms cooperating, which is exactly this module's point.)</p>
+  </details>
+</section>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Part of <a href="tutorial.html">Track 1 Module 10</a>'s vocabulary web (Phase 4). The adoption agency algorithm itself is not built by this course (out of scope — see <code>ROADMAP.md</code>); this hub exists to correctly place it relative to what IS built, not to teach its internals.</p>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 09 · Text-Node Fusion — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 09 · Build phase · No new source — a stronger proof</p>
+  <h1>Text-Node<em>Fusion</em></h1>
+  <p class="thesis">Every module through 08 checked whether the <b>shape</b> of the fused output matches a real browser. This module checks something stronger and unobservable from output alone: is it literally the <b>same object</b>, mutated — or a new one that merely looks identical?</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>The <code>TextNode</code> object that <code>"abc"</code> produces, captured by direct reference <em>before</em> <code>&lt;table&gt;</code> even exists, is <span class="hi">the exact same object</span> — <code>===</code>, not just equal-looking — after <code>"def"</code> is fostered into it from the other side of the table.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../00_tokens_and_nodes/tutorial.html">Module 00 · Tokens & node shape</a>
+    <a class="tag" href="../05_seven_substeps/tutorial.html">Module 05 · The seven substeps</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>The pavement outside the gate isn't empty. If someone is already standing there, the new arrival doesn't get their own spot — they get absorbed into the group that's already waiting. Not <em>seated next to</em> — absorbed, as if they'd been there all along. If you checked the guest list five minutes later, you wouldn't find two entries that happen to look like one group. You'd find one entry, updated.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>"abc"</code> is inserted into <code>&lt;div&gt;</code>, ordinarily, before any table exists. A direct reference to the resulting <code>TextNode</code> is captured.</li>
+      <li><code>&lt;table&gt;</code> is inserted after it — ordinary insertion, ends up as <code>div</code>'s second child.</li>
+      <li><code>"d"</code>, <code>"e"</code>, <code>"f"</code> are fostered — current node is now <code>table</code>, a fostering target — landing, per Module 05, immediately before the table.</li>
+      <li>After fostering, <code>div.children[0]</code> is compared with <code>===</code> against the reference captured in step 1 — not just checked for equal <code>.data</code>.</li>
+      <li>A second test repeats the fostering with three fully independent enable/disable cycles (not one shared loop), proving fusion doesn't depend on a particular calling pattern.</li>
+      <li>A third test runs the same input through the complete <code>dispatch8</code> engine, confirming the identity guarantee holds end-to-end, not just in isolated calls.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>What a shape check can tell you</h4>
+      <pre class="tree">div
+├─ #text "abcdef"
+└─ table</pre>
+      <p style="margin:10px 0 0;font-size:14px">Consistent with EITHER: one mutated node, or two nodes serialized adjacently. Shape alone can't tell you which.</p>
+    </div>
+    <div class="railbox">
+      <h4>What this module's <code>===</code> check tells you</h4>
+      <pre class="tree">originalTextNode        <span class="caret">← captured before table existed</span>
+  === div.children[0]   <span class="caret">← true, after fostering "def"</span></pre>
+      <p style="margin:10px 0 0;font-size:14px">Only one interpretation survives: mutation of the original object.</p>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The check that every prior module's tree-shape comparison couldn't make:</p>
+  <pre><code><span class="c">const originalTextNode = div.children[0];  // captured BEFORE &lt;table&gt; exists
+// ...insert &lt;table&gt;, then foster "d","e","f"...</span>
+<span class="y">assert.equal(div.children[0], originalTextNode);</span><span class="c">  // ===, not deepEqual
+assert.equal(originalTextNode.data, 'abcdef');</span></code></pre>
+  <p>Why no new production code was needed to make this true — it was already true since Module 00 — and why that's worth stating as its own decision, is in <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Verify object-identity fusion against a real browser directly — <code>DOMParser</code>'s serialized output can't distinguish "mutated node" from "new equal-looking node"</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Prove, at the object level, that fostered text merges into an existing node rather than creating a new one</li>
+        <li>Prove this holds whether fusion happens inside one loop or across several fully independent calls</li>
+        <li>Prove it holds through the complete parsing engine, not just in isolated calls</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/09_text_fusion
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Part 1: object-identity fusion, not just matching output ──
+Captured a direct reference to the "abc" TextNode before &lt;table&gt; exists.
+After fostering "d", "e", "f":
+  div.children.length = 2 (must still be 2 — no new node created)
+  div.children[0] === originalTextNode ? true
+  div.children[0].data = "abcdef"
+
+── Part 2: fusion survives across SEPARATE fostering events, not just one loop ──
+Three separate enable/disable cycles for x, y, z → one text node "xyz". OK.
+
+── Part 3: full engine, real input, same guarantee ──
+Full dispatch8 engine on real input: div.children.length = 2 | text = "abcdef"
+
+OK — all assertions passed. Module 09 text-node fusion verified at the object-identity level.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If <code>div.children[0] === originalTextNode</code> prints <code>false</code> but <code>.data</code> still reads <code>"abcdef"</code>, something replaced the node instead of mutating it — check <code>tryFuseCharacter</code> (Module 00) is still appending to <code>before.data</code> in place, not constructing a new <code>TextNode</code>.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>DECISIONS.md says this module ran no fresh live-browser verification, because object identity "isn't observable through <code>DOMParser</code>'s output." Is there any way — even a hard one — to actually observe a real browser's node-identity behavior here, rather than just trusting the spec's wording?</summary>
+    <p>Yes, in principle: a <code>MutationObserver</code> watching a live, incrementally-parsed document (e.g. via <code>document.write</code>) would report a <code>characterData</code> mutation on the existing text node if the browser mutates in place, versus a <code>childList</code> mutation adding a new node if it doesn't. <code>DOMParser</code> specifically can't be used for this because it builds the whole document in one shot with no observable intermediate steps — there's no "before" moment to compare against, which is exactly the same problem this module's own test solves by capturing <code>originalTextNode</code> before the table exists in <em>our</em> engine. Setting that up against a real browser was judged not worth the complexity for what the spec already states unambiguously in prose.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Does it actually matter, practically, whether fostered text merges into an existing node versus creating a new adjacent one that looks the same?</summary>
+    <p>Enormously, for anything that holds a reference to a DOM node across a mutation — which is exactly Track 2's subject. A sanitizer, a diffing algorithm, or a piece of instrumentation that captured a reference to a text node and expects to still be looking at "the same node" later can be silently invalidated if the parser actually replaces nodes instead of mutating them (or vice versa, if code assumes replacement and gets mutation). This module's proof isn't paranoia about an edge case — it's establishing precisely the guarantee (or its absence) that later security-relevant code has to reason about correctly.</p>
+  </details>
+
+  <details>
+    <summary>Why does Part 2 bother testing three separate enable/disable cycles when Module 08 already fostered a multi-character run inside one loop?</summary>
+    <p>Because "inside one loop" and "as three independent events" are different claims about robustness. Module 08's run was buffered together and flushed in one pass specifically because the characters arrived consecutively with nothing in between. Part 2 asks a different question: if three fostering decisions happen at completely separate times, with the enable/disable bracket opened and closed fresh each time (as would happen for genuinely isolated characters, not a buffered run), does fusion still work? The answer being yes confirms fusion is a property of the tree at the moment of insertion, not an artifact of a particular call pattern this engine's own modules happen to use.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 10 is where foster parenting stops being a local, self-contained rule and starts interacting with the parser's other major error-recovery machine: the active formatting elements list. The spec's own canonical example turns one <code>&lt;b&gt;</code> tag into three separate <code>&lt;b&gt;</code> elements — and building it will require this course's engine to track, for the first time, a second list alongside the stack of open elements, plus the "clear the stack back to a table context" operation that manufactures the divergence between them.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../08_in_table_text/tutorial.html">← Module 08 — "in table text" & the whitespace trap</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../10_formatting_triple_b/tutorial.html">Module 10 — Formatting elements & the triple &lt;b&gt; →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>No new source file for this module — see <a href="DECISIONS.md">DECISIONS.md</a> for why, and for the full rationale behind its identity-level test design. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

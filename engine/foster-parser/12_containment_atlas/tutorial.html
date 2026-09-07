@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 12 · The Containment Atlas — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 12 · Audit + one new tactic</p>
+  <h1>The<em>Containment Atlas</em></h1>
+  <p class="thesis">Foster parenting is one tactic out of <b>seven</b> the spec uses when content doesn't fit where it landed. This module names all seven, honestly audits which this course's engine actually builds, and adds one more: MERGE.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>A second <code>&lt;html foo="1"&gt;</code> tag merges onto the ONE existing root — <span class="hi">first attribute value wins, new attribute names get added</span> — verified against real browser output. Plus: 7 of 14 named containment behaviors are backed by real, tested code in this engine; the rest are named and explained, not hidden.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../04_five_elements/tutorial.html">Module 04 · Why exactly five elements</a>
+    <a class="tag" href="../03_the_flag_lifetime/tutorial.html">Module 03 · The flag lifetime</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Two entirely different people can tell you a nesting is wrong. The <strong>building inspector</strong> reads the plans and files a violation — nothing moves, the building stands exactly as drawn. That's a content-model violation: a validator complains, the parser doesn't care. The <strong>security staff</strong> physically relocate you — and there isn't just one way they do it. Some visitors get walked to the gate (FOSTER). Some get told "you're already on the list, we'll just update your file" (MERGE — this module's new addition). Some get turned away at the door entirely (IGNORE). Foster parenting is only one tactic in a much larger security manual.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>CONTAINMENT_ATLAS</code> lists fourteen rows: elements or situations, each tagged with a tactic name and whether this engine has real code for it.</li>
+      <li><code>mergeHtmlAttributes(state, token)</code> — the one new mechanism — reads <code>state.stack[0]</code> (always the html root, per Module 01) and adds any attribute from a second <code>&lt;html&gt;</code> tag that isn't already present, leaving existing values untouched.</li>
+      <li><code>inBodyFosterAware12</code> checks for a <code>StartTag 'html'</code> before anything else, since MERGE is the most specific possible match.</li>
+      <li>The demo verifies MERGE against real captured browser output, then walks the full atlas, asserting at least five tactics are backed by real code.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Tactic</th><th>Built in this engine?</th></tr></thead>
+    <tbody>
+      <tr><td class="strat">FOSTER</td><td class="yes">Yes — Modules 02–11, the whole course</td></tr>
+      <tr><td class="strat">MERGE</td><td class="yes">Yes — this module</td></tr>
+      <tr><td class="strat">IGNORE</td><td class="yes">Yes — Module 07 (DOCTYPE mid-table)</td></tr>
+      <tr><td class="strat">REDIRECT (mode-level)</td><td class="yes">Yes — Module 03</td></tr>
+      <tr><td class="strat">POP+REPROCESS (pattern)</td><td class="yes">Yes — Modules 01, 08</td></tr>
+      <tr><td class="strat">CLOSE</td><td class="no">No — not built</td></tr>
+      <tr><td class="strat">ADOPTION AGENCY</td><td class="no">No — explicitly out of scope</td></tr>
+      <tr><td class="strat">TOKENIZER / VOID</td><td class="no">No — structural impossibilities, unmodeled</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The tactic that gives this module its one new mechanism:</p>
+  <pre><code><span class="c">function mergeHtmlAttributes(state, token) {
+  const root = state.stack[0];
+  for (const [name, value] of token.attrs) {</span>
+    <span class="y">if (!root.attrs.has(name)) {
+      root.attrs.set(name, value);  // first occurrence wins — never overwrite</span><span class="c">
+    }
+  }
+}</span></code></pre>
+  <p>Why Module 03's mode-borrowing counts as a real REDIRECT while Module 07's simplified template handling doesn't — a judgment call this module states rather than hides — is explained in full in <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>CLOSE (implicit closing on a new start tag — <code>&lt;p&gt;</code>, <code>&lt;li&gt;</code>, headings, etc.)</li>
+        <li>The adoption agency algorithm (misnested <code>&lt;a&gt;</code>/<code>&lt;nobr&gt;</code>)</li>
+        <li>RAWTEXT/RCDATA tokenizing, or structural void-element enforcement</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly merge a second <code>&lt;html&gt;</code> tag's attributes, first-wins, matching real browsers exactly</li>
+        <li>Give an honest, itemized accounting of exactly which spec recovery tactics this engine implements and which it doesn't, and why</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/12_containment_atlas
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run, abridged)</span>
+    <pre><code>── The MERGE tactic: a second &lt;html&gt; tag merges attributes, creates no new node ──
+Number of &lt;html&gt; ELEMENT objects in the tree: 1
+Root &lt;html&gt; attrs: foo="1" bar="2"
+
+OK: exactly one &lt;html&gt; node; foo="1" (first wins), bar="2" (new attribute added).
+
+── The containment atlas: every tactic this course names, and what's built ──
+[... 14 rows ...]
+
+7 of 14 atlas rows are backed by real, tested code in this engine;
+the rest are honestly scoped out, each with a specific, named reason.
+
+OK — all assertions passed. Module 12 containment atlas verified.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If <code>bar="override"</code> appears instead of <code>bar="1"</code>... check the guard is <code>if (!root.attrs.has(name))</code>, not an unconditional <code>.set()</code> — an unconditional set would silently implement "last wins," the opposite of the real rule.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The atlas credits Module 01's implied-html/implied-head insertions as examples of the POP+REPROCESS pattern, even though nothing gets popped in those cases (they're pure insert-and-reprocess, no pop). Is that an honest classification?</summary>
+    <p>Partially — and DECISIONS.md is explicit that this is a judgment call, not an exact match. The REAL "POP+REPROCESS" tactic (as `<colgroup>`'s handling of an unexpected tag) specifically pops an element off the stack before reprocessing. Module 01's implied-element cases only insert-then-reprocess, no pop involved. What they share is the "reprocess" half of the pattern, not the "pop" half. A stricter atlas might list these as a distinct, unnamed pattern rather than folding them into POP+REPROCESS — this module chose the looser classification and says so, rather than either overclaiming a perfect match or omitting the connection entirely.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why does the second &lt;html&gt; tag's <code>foo="override"</code> lose to the FIRST tag's <code>foo="1"</code>? Wouldn't "last write wins" be the more familiar default from CSS or JavaScript object spreading?</summary>
+    <p>Familiar from other systems, yes — and exactly why this is worth testing explicitly rather than assuming. HTML's merge rule is first-wins specifically because the root <code>&lt;html&gt;</code> element is created once, early, often before a script or later markup has any chance to reconsider its attributes — the spec treats the ones present at creation time as authoritative, and anything arriving later can only fill in gaps, never override. This is the kind of "easy to get backwards" detail this course's real-browser verification methodology exists to catch.</p>
+  </details>
+
+  <details>
+    <summary>This module says 7 of 14 tactics are implemented — is 14 the "real" number of containment tactics in HTML, or just how many this course happened to list?</summary>
+    <p>The latter, and the atlas doesn't claim otherwise. Fourteen is how many distinct elements/situations this course's own source material (the attached reference course's Module 10) and this engine's own build history named as worth distinguishing — not an exhaustive enumeration of every element the real HTML spec has an opinion about (there are dozens more, each with their own clause). The count is a snapshot of THIS course's coverage, stated as such.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 13, the last of Track 1, turns to scope — the mechanism that stops end tags from reaching across container boundaries, and the reason a stray <code>&lt;/p&gt;</code> or <code>&lt;/div&gt;</code> inside a cell can never accidentally close something that was opened outside the table. It closes out Track 1 with a lab of twelve predict-then-verify markup snippets, several drawn directly from this course's own build history.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../11_templates_fragments/tutorial.html">← Module 11 — Templates, fragments, detached tables</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../13_scope/tutorial.html">Module 13 — Scope & why table is a wall →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/12_containment_atlas/src/merge.js</code>, <code>src/dispatch12.js</code>, <code>src/containment_atlas.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

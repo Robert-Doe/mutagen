@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 06 · What Gets Fostered — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 06 · Build phase</p>
+  <h1>What Gets<em>Fostered</em></h1>
+  <p class="thesis">Foster parenting isn't element-specific — it's a property of the <b>insertion location</b>. This module proves that by fostering an HTML element, two foreign (SVG/MathML) elements, and a lone character, all in one input, and watching all four land in the same relative spot, in source order.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><span class="hi">insertForeignElementAtAppropriatePlace()</span> is not a coincidence of matching output — it's the exact same function Module 05 built for HTML elements, and this module's own 2013-bug history explains why the spec insists on that.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../05_seven_substeps/tutorial.html">Module 05 · The seven substeps</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>It isn't only people who get walked out the gate. Security escorts out the luggage, the pets, and the entire foreign delegation too — anything that arrives through the front door and isn't on the corridor's list gets the same treatment, because the rule was never "escort out anyone whose passport looks like this." It's "escort out anything landing at this door, full stop." A foreign delegation (MathML/SVG) doesn't get special-cased into staying, because the guard was never checking passports in the first place — only doors.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>insertForeignElementAtAppropriatePlace()</code> is defined as a one-line call-through to Module 05's <code>insertElementAtAppropriatePlace()</code> — same location algorithm, no special casing.</li>
+      <li>A structural probe builds two byte-identical parser states, inserts an ordinary <code>&lt;div&gt;</code> into one via the HTML-element function and a <code>&lt;math&gt;</code> into the other via the foreign-element function, and asserts the two resulting trees are structurally identical (modulo the tag name itself).</li>
+      <li>Three real inputs are then run through Module 05's <code>dispatch5</code> engine, completely unmodified: a bare <code>&lt;math&gt;</code> in a table, a bare <code>&lt;svg&gt;</code> in a table, and a mixed case — <code>&lt;div&gt;</code>, <code>&lt;math&gt;</code>, a character, and <code>&lt;svg&gt;</code>, all inside one table.</li>
+      <li>All three are asserted against real, independently-captured browser <code>DOMParser</code> output.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">Input — one HTML element, two foreign elements, one character, all inside a table</span>
+    <pre><code>&lt;table&gt;&lt;div&gt;&lt;/div&gt;&lt;math&gt;&lt;/math&gt;x&lt;svg&gt;&lt;/svg&gt;&lt;/table&gt;</code></pre>
+    <span class="lab">Output — all four fostered, in strict source order, before the table</span>
+    <pre class="tree">body
+├─ <span class="new">div</span>       <span class="caret">← HTML element</span>
+├─ <span class="new">math</span>      <span class="caret">← foreign element</span>
+├─ <span class="new">#text "x"</span> <span class="caret">← character token</span>
+├─ <span class="new">svg</span>       <span class="caret">← foreign element</span>
+└─ table</pre>
+  </div>
+  <p>Four completely different token kinds, one relocation path, one preserved order.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The entire module's new logic:</p>
+  <pre><code><span class="c">function insertForeignElementAtAppropriatePlace(state, tagName, attrs = new Map()) {</span>
+  <span class="y">return insertElementAtAppropriatePlace(state, tagName, attrs);</span><span class="c">
+}</span></code></pre>
+  <p>Why this is a named wrapper rather than either a straight re-export or an independent reimplementation — and why that choice is itself the point — is explained in full in <a href="DECISIONS.md">DECISIONS.md</a>, alongside the 2013 spec bug this module's test cases are chosen to demonstrate.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Distinguish a foreign element's namespace for any purpose other than fostering — no <code>namespaceURI</code>, no per-namespace attribute-case adjustment</li>
+        <li>Reproduce nodes created by "reconstruct the active formatting elements" being fostered — that's Module 10</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly foster an HTML element, a foreign element, or a character token, using the identical underlying mechanism for all three</li>
+        <li>Preserve strict source order across a mix of all three token kinds landing at the same fostered location</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/06_what_gets_fostered
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Structural check: foreign-element insertion IS HTML-element insertion ──
+OK: identical relocation for an HTML element and a foreign element given the same table-family current node.
+
+── Case A: &lt;table&gt;&lt;math&gt;&lt;/math&gt;&lt;/table&gt; ──
+body
+  math
+  table
+
+── Case B: &lt;table&gt;&lt;svg&gt;&lt;/svg&gt;&lt;/table&gt; ──
+body
+  svg
+  table
+
+── Case C: mixed HTML element + foreign elements + character, source order ──
+body
+  div
+  math
+  #text "x"
+  svg
+  table
+
+OK — all assertions passed. Module 06 "what gets fostered" verified against real browser output.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If Case C's order doesn't match, check that <code>dispatch5</code>'s generic start-tag fallback (Module 05's <code>inBodyFosterAware</code>) is still being reached for both <code>math</code> and <code>svg</code> — this module deliberately relies on that existing generic path rather than adding a new one.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The 2013 bug happened because someone reasoned "a foreign element's current node is always non-HTML by the time it's inserted." Construct the shortest input where that reasoning fails, and say in one sentence why it fails there.</summary>
+    <p><code>&lt;table&gt;&lt;math&gt;</code> — the shortest possible failing case, and the exact one this module tests. It fails because the CURRENT NODE at the moment <code>&lt;math&gt;</code> is being inserted is still the HTML <code>&lt;table&gt;</code> element — the foreign element hasn't been inserted yet, so nothing foreign is on the stack at all. The reasoning conflated "the node being inserted is foreign" with "the current node is foreign," which are only the same thing for the SECOND foreign element onward inside a foreign subtree, never the first.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>If the two functions are this similar, why not just delete <code>insertForeignElementAtAppropriatePlace</code> entirely and have callers use <code>insertElementAtAppropriatePlace</code> directly?</summary>
+    <p>Because the name itself is documentation. A future module's code that reads <code>insertForeignElementAtAppropriatePlace(state, 'math')</code> states its intent (this is a foreign element, deliberately) in a way that calling the HTML-element function directly for a <code>&lt;math&gt;</code> tag wouldn't. The wrapper costs one function and one import; the clarity it buys at every call site is worth it, and DECISIONS.md explains why a wrapper (not a re-export, not a duplicate) is the specific form that earns that clarity honestly.</p>
+  </details>
+
+  <details>
+    <summary>Why does the demo build a "structural probe" by hand instead of just trusting that matching real-browser output for Cases A/B/C is proof enough?</summary>
+    <p>Because matching output is proof the <em>answer</em> is right, not proof of <em>why</em> it's right. A parser that happened to hardcode "if tagName is math or svg, insert before the nearest table" would also pass Cases A, B, and C — and would also be a ticking time bond the moment a new foreign element name showed up. The structural probe instead asks the more general question directly: given the same state, do the two functions do the same thing? That generalizes to every foreign element, not just the two tested.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 07 turns to the opposite question: what <em>refuses</em> to be fostered, even though it's unhandled content arriving at a table-family current node. <code>&lt;style&gt;</code>, <code>&lt;script&gt;</code>, <code>&lt;template&gt;</code>, a hidden <code>&lt;input&gt;</code>, and <code>&lt;form&gt;</code> all have their own explicit clauses in "in table" that intercept them before the anything-else fallback this course has been building since Module 03 is ever reached — including the "childless form" bug this course's own attached reference calls its single most reliable source of "why is my form empty" reports.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../05_seven_substeps/tutorial.html">← Module 05 — The seven substeps</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../07_what_refuses/tutorial.html">Module 07 — What refuses to be fostered →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/06_what_gets_fostered/src/foreign.js</code>. Full rationale, including the 2013 spec bug: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

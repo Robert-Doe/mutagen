@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 03 · The Flag Lifetime — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 03 · Build phase</p>
+  <h1>The Flag<em>Lifetime</em></h1>
+  <p class="thesis">Module 02 built a lock that needs two signals. This module builds the <b>only wiring in the entire engine</b> that ever sends the second signal — and proves it fires for exactly one token, whether or not that token succeeds.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><span class="hi">Enable → process one token → disable</span>, unconditionally, via <code>try/finally</code> — and a subtle spec distinction most implementations get wrong on the first try: "process using the rules for in body" does <b>not</b> mean "switch to in body mode."</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../../prerequisites/prereq_insertion_modes.html">P4 · Insertion modes</a>
+    <a class="tag" href="../02_two_conditions_one_gate/tutorial.html">Module 02 · Two conditions, one gate</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Picture a security guard who is not stationed anywhere — he's summoned by exactly one supervisor, for exactly one visitor, and then sent home. He doesn't relocate to a different post and stay there; he borrows a moment of the front desk's procedure manual, applies it to this one visitor, and leaves the front desk's normal staffing completely unaffected once he's done.</p>
+    <p>The tempting mistake is to imagine the guard <em>becomes</em> front-desk staff for a while — walks over, sits down, works the desk. That's not what happens. He reads their manual on the spot, standing where he already was, and — critically — the desk's own manual can still tell <em>him</em> to relocate somewhere else entirely (that's the <code>&lt;table&gt;</code> case: in body's own rule for a nested table explicitly says "switch to in table," and that instruction is still obeyed). Otherwise, when he's done, nothing about where anyone is stationed has changed.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li>The dispatch loop reaches <code>in table</code> mode with a token in hand that has no specific <code>in table</code> rule yet (every token, for now — Module 03 only implements the fallback).</li>
+      <li><code>inTableAnythingElse()</code> sets <code>state.fosterParentingEnabled = true</code> and logs <code>'enable'</code>.</li>
+      <li>It calls <code>MODES['in body'](token, state)</code> <strong>directly</strong> — not by setting <code>state.mode</code> and going through <code>dispatch()</code>.</li>
+      <li>Whatever in body's rule for that specific token does, happens: insert a character, insert a table and switch modes, or throw <code>NotImplementedYet</code> if in body has no rule either.</li>
+      <li>Regardless of which of those three happened, a <code>finally</code> block sets <code>state.fosterParentingEnabled = false</code> and logs <code>'disable'</code>.</li>
+      <li>If step 4 threw, the error propagates onward <em>after</em> step 5 completes — the flag's cleanup and the error's visibility are independent guarantees.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>Scenario A: fallback token in body can't handle either</h4>
+      <pre class="tree">mode: in table
+  │
+  ├─ enable  (flag → true)
+  ├─ MODES['in body'](EndTag table)
+  │     └─ throws NotImplementedYet
+  ├─ disable (flag → false)   ← finally, runs anyway
+  └─ error re-thrown
+
+mode after: still "in table"</pre>
+    </div>
+    <div class="railbox">
+      <h4>Scenario B: fallback token in body handles fine</h4>
+      <pre class="tree">mode: in table
+  │
+  ├─ enable  (flag → true)
+  ├─ MODES['in body'](Character ' ')
+  │     └─ inserts text, returns normally
+  ├─ disable (flag → false)
+  └─ no error
+
+mode after: still "in table"</pre>
+    </div>
+  </div>
+  <p>Same bracketing, same outcome for the flag, in both scenarios — only whether an error surfaces afterward differs. Mode never moves in either case, because neither token's in-body rule contains an explicit mode switch.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The line that makes the whole module correct — calling the rule table directly instead of routing through <code>state.mode</code>:</p>
+  <pre><code><span class="c">function inTableAnythingElse(token, state, log = () => {}) {
+  log('enable');
+  state.fosterParentingEnabled = true;
+  try {</span>
+    <span class="y">MODES['in body'](token, state);</span><span class="c">
+  } finally {
+    log('disable');
+    state.fosterParentingEnabled = false;
+  }
+}</span></code></pre>
+  <p>Compare to the naive version this module's <a href="DECISIONS.md">DECISIONS.md</a> explains in detail — <code>state.mode = 'in body'; dispatch(token, state);</code> — which looks almost identical but silently overwrites the mode variable even when in body's own rule for that token never asked for a switch.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Handle any <code>in table</code>-specific tag (<code>&lt;tr&gt;</code>, <code>&lt;td&gt;</code>, <code>&lt;caption&gt;</code>, …) — every token still falls to the anything-else fallback</li>
+        <li>Actually relocate a fostered node anywhere — the flag turns on and off correctly, but nothing yet reads it to change <em>where</em> an insertion happens (that's Module 05)</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly bracket the flag around exactly one token, on both success and failure paths</li>
+        <li>Preserve <code>state.mode</code> exactly as the spec's "process using the rules for X" technique requires, distinct from a real mode switch</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/03_the_flag_lifetime
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Reached mode "in table" (current node &lt;table&gt;) at token #6: &lt;/table&gt; ──
+
+── Scenario A: fallback token that in body ALSO can't handle ──
+log: enable → disable
+flag after: false
+mode after: in table (must still be "in table" — in body's rules never touched it)
+
+── Scenario B: fallback token that in body CAN handle ──
+log: enable → disable
+flag after: false
+mode after: in table (must still be "in table")
+
+OK — all assertions passed. Module 03 flag lifetime verified.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If Scenario B's "mode after" prints <code>in body</code> instead of <code>in table</code>, you've reintroduced the naive <code>state.mode = 'in body'</code> approach — check that <code>inTableAnythingElse()</code> calls <code>MODES['in body'](token, state)</code> directly rather than setting <code>state.mode</code> first. If <code>MODES is not defined</code>, confirm Module 01's <code>dispatch.js</code> still exports it (see DECISIONS.md's note on this module's one additive edit to an earlier module's file).</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>Suppose a future module's <code>in table</code>-specific rule for <code>&lt;tr&gt;</code> needs to run <em>before</em> the anything-else fallback in this module. Where would that rule need to be checked, relative to <code>inTableAnythingElse()</code> — inside it, or before it's ever called?</summary>
+    <p>Before it's ever called. <code>inTableAnythingElse()</code> is specifically the anything-else clause — by definition, the fallback for tokens no more specific rule claimed first. A future module's dispatch wrapper needs to check "is this token one of the specific cases (<code>&lt;tr&gt;</code>, <code>&lt;td&gt;</code>, etc.)?" first, and only call into this module's fallback if none matched — mirroring exactly how the real spec's "in table" section lists specific-tag rules first and ends with "anything else" last. This module's function is deliberately named to make that ordering obvious to whoever extends it next.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why does Scenario A bother re-throwing the error at all? Wouldn't it be simpler for the wrapper to just swallow it, since the flag got cleaned up successfully either way?</summary>
+    <p>Because "the flag got cleaned up" and "the token got handled" are two completely different claims, and conflating them would hide real bugs. If <code>inTableAnythingElse()</code> swallowed the error, a caller would have no way to know that <code>&lt;/table&gt;</code> wasn't actually processed — the parse would silently continue as if everything were fine, which is exactly the "roughly right tree shapes are how foster-parenting bugs hide" failure mode this course has flagged since Module 00's FAQ.</p>
+  </details>
+
+  <details>
+    <summary>This module exports <code>MODES</code> from Module 01's file. Doesn't that break the "every module only adds, never edits" rule from Module 02's DECISIONS.md?</summary>
+    <p>It bends it, deliberately and narrowly, and DECISIONS.md says so explicitly. The rule's spirit is "don't change what already works," not "never touch an earlier file's text." Adding an export doesn't change any existing behavior — Modules 00, 01, and 02's own tests were re-run after this change specifically to confirm that, and all three still pass unmodified. The alternative (copy-pasting in body's rule table into Module 03) would violate a stronger principle: one source of truth per rule table.</p>
+  </details>
+
+  <details>
+    <summary>Why use a <code>finally</code> block instead of just writing the disable line twice — once after a successful call, once in a <code>catch</code>?</summary>
+    <p>Because that duplicates the exact line whose entire job is "always run this, no matter what" — which is a description of what <code>finally</code> means, built into the language, rather than something to hand-maintain in two places that could drift apart. It's also the more direct translation of the spec's own phrasing: "enable, process, disable" reads as one guaranteed sequence, and <code>try { process } finally { disable }</code> says exactly that in code.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 04 uses this exact wiring — reach <code>in table</code>, feed it a token, watch the flag bracket it — but varies the <em>current node</em> across all five table-family elements (and a handful of non-members, like <code>td</code> and <code>caption</code>) to prove the five-element list from Module 02 isn't arbitrary: each of the five fails to "host" a stray node for a reason derivable from CSS table layout, and each of the excluded near-misses (<code>td</code>, <code>th</code>, <code>caption</code>, <code>colgroup</code>, <code>col</code>) is excluded for its own distinct, checkable reason.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../02_two_conditions_one_gate/tutorial.html">← Module 02 — Two conditions, one gate</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../04_five_elements/tutorial.html">Module 04 — Why exactly five elements →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/03_the_flag_lifetime/src/lifecycle.js</code>, plus one additive export added to <code>track1-core/01_stack_and_dispatch/src/dispatch.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

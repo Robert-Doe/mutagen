@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept · Foster Parenting — vocabulary web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Vocabulary web · Module 10 · Term 1 of 4</p>
+  <h1>Foster<em>Parenting</em></h1>
+  <p class="thesis">A parser <b>flag</b>, live for exactly one token, that changes <em>where</em> a node gets inserted. Nothing more.</p>
+</header>
+
+<section class="mod">
+  <div class="analogy">
+    <p>A security guard who isn't stationed anywhere. He's summoned for exactly one arrival, escorts them to a specific spot on the pavement, and leaves. He never decides <em>who</em> gets summoned — that's a separate gate check (Module 02's two conditions). He never decides what happens to anyone <em>already inside</em> — that's a different mechanism entirely (see <a href="concept_adoption_agency.html">adoption agency</a>).</p>
+  </div>
+
+  <div class="spec">
+    <p><strong>What it is:</strong> <code>state.fosterParentingEnabled</code>, a boolean with a one-token lifetime (Module 03).</p>
+    <p><strong>What it does:</strong> when true AND the current node is table-family (Module 02, Module 04), it changes step 2 of "appropriate place for inserting a node" (Prerequisite P5) to compute a different destination — one hop before the nearest open table (Module 05).</p>
+    <p><strong>What it does NOT do:</strong> decide which elements get duplicated when reconstructed (that's <a href="concept_reconstruction.html">reconstruction</a>'s job, this module); move already-adopted, already-misnested formatting elements around after the fact (that's the <a href="concept_adoption_agency.html">adoption agency</a>'s job); or correspond to any DOM API a script author can call directly (see <a href="concept_reparenting_dom_api.html">reparenting</a>).</p>
+  </div>
+
+  <div class="callout brain">
+    <span class="ct">How this connects</span>
+    <p>Foster parenting is the <em>mechanism</em> the other three terms on this page interact with, not a peer of theirs. <a href="concept_reconstruction.html">Reconstruction</a> can trigger foster parenting (Module 10: reconstructing a <code>&lt;b&gt;</code> while current node is table-family fosters it). The <a href="concept_adoption_agency.html">adoption agency</a>'s final relocation step routes through the exact same "appropriate place" algorithm foster parenting lives in — so it can foster too, but it's a much larger algorithm doing a different job. <a href="concept_reparenting_dom_api.html">DOM reparenting</a> shares only a name's overlap with none of the mechanism.</p>
+  </div>
+</section>
+
+<div class="modnav">
+  <span></span>
+  <span class="next"><span class="dir">Next</span><a href="concept_adoption_agency.html">The adoption agency algorithm →</a></span>
+</div>
+<p style="margin-top:20px"><a href="concept_how_they_connect.html" style="font-family:var(--mono);font-size:13px;color:var(--pen)">↩ Back to the hub: how all four terms connect</a></p>
+
+</div>
+</body>
+</html>

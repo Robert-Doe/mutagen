@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 13 · Scope & Why Table Is a Wall — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 13 · Final module · Track 1 complete after this</p>
+  <h1>Scope &<em>Why Table Is a Wall</em></h1>
+  <p class="thesis">The mechanism that stops end tags from reaching across container boundaries — and, seen from the other direction, the same underlying fact Module 04 already proved: <code>table</code>/<code>td</code>/<code>th</code> are structural walls, whether content is trying to get IN (fostering) or an end tag is trying to reach OUT (scope).</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>A stray <code>&lt;/div&gt;</code> inside a <code>&lt;td&gt;</code>, closing an element opened <em>outside</em> the table, is <span class="hi">silently ignored</span> — verified end to end through the complete engine, and separately proven as a direct consequence of the scope algorithm itself.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../04_five_elements/tutorial.html">Module 04 · Why exactly five elements</a>
+    <a class="tag" href="../../prerequisites/prereq_stack_of_open_elements.html">P3 · Stack of open elements</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>A guest holding a room key from the east wing wanders into the west wing and tries to use it on a door there. It doesn't work — not because anyone stops them, but because the key was never valid past the wing boundary to begin with. Scope is that boundary check: an end tag is a key, and certain rooms (<code>table</code>, <code>td</code>, <code>th</code>, and a handful of others) are wing boundaries no key from outside can cross, no matter how the hallways wind between them.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>hasElementInScope(state, target, scopeList)</code> walks the stack from the current node downward. Target found first → true. A scope-list member found first → false, stop.</li>
+      <li>Four named variants wrap this with different scope lists: <code>hasInScope</code> (the base list), <code>hasInListItemScope</code> (base + <code>ol</code>/<code>ul</code>), <code>hasInButtonScope</code> (base + <code>button</code>), <code>hasInTableScope</code> (a much narrower list: only <code>html</code>/<code>table</code>/<code>template</code>).</li>
+      <li>The generic <code>EndTag</code> branch now checks <code>hasInScope</code> first. Not in scope → silently ignored, no pop, no error surfaced.</li>
+      <li>In scope AND current node matches exactly → pops, exactly as every module since 05.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">Input</span>
+    <pre><code>&lt;div id="outer"&gt;&lt;table&gt;&lt;tr&gt;&lt;td&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;</code></pre>
+    <span class="lab">Output — the inner &lt;/div&gt; never happened</span>
+    <pre class="tree">body
+└─ div
+   └─ table
+      └─ tbody
+         └─ tr
+            └─ td   <span class="caret">← empty; the stray &lt;/div&gt; changed nothing here</span></pre>
+  </div>
+  <p>The outer <code>&lt;div&gt;</code> still has exactly one child. Not two, not a text node, not a crash — one child, the table, exactly as if the stray end tag had never appeared in the source at all.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The entire mechanism, in the branch where it matters:</p>
+  <pre><code><span class="c">if (token.type === 'EndTag') {</span>
+  <span class="y">if (!hasInScope(state, token.tagName)) {
+    return; // parse error — ignore. This is "table is a wall" in one line.
+  }</span><span class="c">
+  const cur = currentNode(state);
+  if (cur && cur.tagName === token.tagName) {
+    state.stack.pop();
+    /* ... */
+  }
+}</span></code></pre>
+  <p>And the scope check itself — note the target is checked before the boundary, which is what lets a scope list find itself as a target (Case: does <code>table</code> exist to close, checked FROM inside the table):</p>
+  <pre><code><span class="c">function hasElementInScope(state, targetTagName, scopeList) {
+  for (let i = state.stack.length - 1; i >= 0; i--) {
+    const tagName = state.stack[i].tagName;</span>
+    <span class="y">if (tagName === targetTagName) return true;   // checked FIRST
+    if (scopeList.has(tagName)) return false;</span><span class="c">    // boundary, checked second
+  }
+  return false;
+}</span></code></pre>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>"Generate implied end tags" — an in-scope target whose current node isn't an exact match still falls to <code>NotImplementedYet</code></li>
+        <li>MathML/SVG scope boundaries — no namespace tracking, consistent since Module 00</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly silence a stray end tag that would otherwise cross a table boundary, end to end through the real engine</li>
+        <li>Demonstrate all four scope variants disagreeing on the exact same stack, for principled reasons</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/13_scope
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Part 1: a stray &lt;/div&gt; inside a &lt;td&gt; can never close the outer &lt;div&gt; ──
+body
+  div
+    table
+      tbody
+        tr
+          td
+
+OK: the inner &lt;/div&gt; was silently ignored (parse error, no effect); the outer &lt;div&gt; still has exactly
+one child (the table) — no stray text, no premature close.
+
+── Part 2: the four scope variants disagree on purpose ──
+Stack: html &gt; body &gt; div &gt; ol &gt; li — hasInScope('div') = true, hasInListItemScope('div') = false
+Stack: html &gt; body &gt; div &gt; button — hasInScope('div') = true, hasInButtonScope('div') = false
+Stack: html &gt; body &gt; div &gt; table &gt; tbody &gt; tr &gt; td — hasInScope('div') = false
+Stack: html &gt; body &gt; table — hasInTableScope('table') = true
+
+OK — all assertions passed. Module 13 scope verified, both end-to-end and variant-by-variant.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If the outer <code>&lt;div&gt;</code> ends up with two children instead of one, the scope check isn't blocking the inner <code>&lt;/div&gt;</code> — verify <code>hasInScope</code> is being called before the exact-match pop, not after.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise — the Track 1 review lab</h2></div>
+  <p>Twelve markup snippets, drawn from this course's own build history. Predict the output before revealing — every one of these was verified against a real browser somewhere in Modules 05–13.</p>
+
+  <details>
+    <summary>1. <code>&lt;div&gt;abc&lt;table&gt;def&lt;/table&gt;&lt;/div&gt;</code> — how many Text nodes end up under <code>div</code>?</summary>
+    <p><strong>One.</strong> <code>#text "abcdef"</code>, fused. Module 05, Module 09.</p>
+  </details>
+
+  <details>
+    <summary>2. <code>&lt;table&gt;&lt;td&gt;&lt;table&gt;&lt;tr&gt;FOO&lt;/table&gt;&lt;/table&gt;</code> — inside or outside a table, overall?</summary>
+    <p><strong>Inside</strong> the outer table's <code>&lt;td&gt;</code> — one hop out of the <em>nearest</em> table is not one hop out of all tables. Module 05.</p>
+  </details>
+
+  <details>
+    <summary>3. <code>&lt;table&gt;&lt;math&gt;&lt;/math&gt;&lt;/table&gt;</code> — inside or outside the table?</summary>
+    <p><strong>Outside</strong> — foreign elements foster exactly like HTML elements (the corrected 2013 spec text). Module 06.</p>
+  </details>
+
+  <details>
+    <summary>4. <code>&lt;table&gt;&lt;form&gt;&lt;input name=x&gt;&lt;/form&gt;&lt;/table&gt;</code> — does <code>&lt;input&gt;</code> end up inside <code>&lt;form&gt;</code>?</summary>
+    <p><strong>No.</strong> <code>&lt;form&gt;</code> is popped the instant it's created; <code>&lt;input&gt;</code> arrives with current node already back to <code>table</code>, and fosters outside it entirely. Module 07's childless-form bug.</p>
+  </details>
+
+  <details>
+    <summary>5. <code>&lt;table&gt;  &lt;/table&gt;</code> (whitespace only) — parse error?</summary>
+    <p><strong>No parse error.</strong> Whitespace-only runs insert inside the table normally. Module 08.</p>
+  </details>
+
+  <details>
+    <summary>6. <code>&lt;table&gt; x &lt;/table&gt;</code> (one non-space character) — where does the whitespace around <code>x</code> go?</summary>
+    <p><strong>Travels with it</strong> — the whole buffered run fosters together, fused into one text node. Module 08.</p>
+  </details>
+
+  <details>
+    <summary>7. <code>&lt;table&gt;&lt;b&gt;&lt;tr&gt;&lt;td&gt;aaa&lt;/td&gt;&lt;/tr&gt;bbb&lt;/table&gt;ccc</code> — how many <code>&lt;b&gt;</code> elements, total?</summary>
+    <p><strong>Three</strong> — distinct objects, verified by identity, not just by matching output. Module 10, the spec's own canonical example.</p>
+  </details>
+
+  <details>
+    <summary>8. <code>table.innerHTML = '&lt;p&gt;x&lt;/p&gt;'</code> vs. parsing <code>&lt;table&gt;&lt;p&gt;x&lt;/p&gt;&lt;/table&gt;</code> as a document — same result?</summary>
+    <p><strong>Opposite.</strong> innerHTML: <code>p</code> INSIDE. Document parse: <code>p</code> OUTSIDE. Module 11 — "where does a <code>&lt;p&gt;</code> in a table end up" has no answer until you say how it got there.</p>
+  </details>
+
+  <details>
+    <summary>9. <code>&lt;table&gt;&lt;template&gt;&lt;p&gt;a&lt;/p&gt;&lt;/template&gt;&lt;/table&gt;</code> — does the <code>&lt;p&gt;</code> get fostered before the table?</summary>
+    <p><strong>No</strong> — it's intercepted into the template's own <code>.content</code>, never reaching the main tree at all. Module 11.</p>
+  </details>
+
+  <details>
+    <summary>10. Second <code>&lt;html foo="1"&gt;</code>... later, <code>&lt;html foo="2" bar="3"&gt;</code> — final attributes on the one <code>&lt;html&gt;</code> element?</summary>
+    <p><strong><code>foo="1" bar="3"</code></strong> — first occurrence wins for duplicates, new attribute names get added. Module 12.</p>
+  </details>
+
+  <details>
+    <summary>11. <code>&lt;div&gt;&lt;table&gt;&lt;tr&gt;&lt;td&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;</code> — does the stray <code>&lt;/div&gt;</code> close anything?</summary>
+    <p><strong>No</strong> — <code>div</code> isn't in scope past the <code>&lt;td&gt;</code> boundary; the end tag is silently ignored. This module, Part 1.</p>
+  </details>
+
+  <details>
+    <summary>12. Hardest — combine two rules: <code>&lt;table&gt;&lt;template&gt;&lt;tbody&gt;FOO&lt;/template&gt;&lt;/table&gt;</code> — where does <code>FOO</code> land?</summary>
+    <p><strong>Inside the template's <code>.content</code></strong>, as <code>&lt;tbody&gt;</code>'s sibling — substep 1 (the template check) fires before the ordinary "before nearest table" computation ever runs, because a <code>&lt;template&gt;</code> deeper on the stack than the last table intercepts first. Module 11.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Is "table is a wall" (scope) the same mechanism as foster parenting, just running in the opposite direction?</summary>
+    <p>No — related, but genuinely separate mechanisms that happen to share the same structural elements as their walls. Foster parenting is about WHERE AN INSERTION LANDS (Module 05's adjusted insertion location). Scope is about WHETHER AN END TAG IS EVEN ALLOWED TO ACT (this module). They're both gated by `table`/`td`/`th`-family elements because those elements are structurally special in the same underlying way (Module 04's "no box to host a stray node" reasoning) — but the two algorithms don't call each other, share code, or run at the same point in tree construction.</p>
+  </details>
+
+  <details>
+    <summary>Why does scope check the CURRENT node's tag first as a possible match, rather than starting the search one level below it?</summary>
+    <p>Because the current node is a completely valid answer to "is there a target element open right now" — the classic use is closing the element you're literally inside of (e.g. <code>&lt;/p&gt;</code> while current node is exactly <code>p</code>). Starting one level down would make the single most common case — closing the thing you're directly inside — require special-casing instead of falling out of the general algorithm for free.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Track 1's original 00–13 roadmap is complete. Next: the cross-module concept clusters (insertion-mode statechart, scope + active-formatting-elements interaction) that span more than one module and don't belong entirely to any single one — then Track 2, where this course turns from "how the parser works" to "how that behavior becomes a security bug." Track 2 Module T2-01 starts exactly where this module leaves off: a sanitizer that trusts a naive mental model of tree construction is a sanitizer that can be defeated by markup shaped like the very examples this lab just walked through.</p>
+  <p>One more module was added afterward, by request: <a href="../14_adoption_agency/tutorial.html">Module 14 — the adoption agency algorithm</a>, the one piece of the containment atlas (Module 12) this course had otherwise deliberately left unbuilt, with a dedicated treatment of how the parser handles malformed HTML in general.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../12_containment_atlas/tutorial.html">← Module 12 — The containment atlas</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../../lessons/01_insertion_mode_statechart/01_explainer.html">Cross-module concept clusters →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/13_scope/src/scope.js</code>, <code>src/dispatch13.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>. This is the last module of Track 1.</p>
+</div>
+
+</div>
+</body>
+</html>

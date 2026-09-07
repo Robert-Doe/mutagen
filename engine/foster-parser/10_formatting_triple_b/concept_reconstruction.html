@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept · Reconstruct the Active Formatting Elements — vocabulary web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Vocabulary web · Module 10 · Term 3 of 4</p>
+  <h1>Reconstruct the Active<em>Formatting Elements</em></h1>
+  <p class="thesis">The algorithm this module actually builds. Checks one question — <b>is the most recent formatting element still open?</b> — and, if not, re-opens exactly enough of them.</p>
+</header>
+
+<section class="mod">
+  <div class="analogy">
+    <p>A standing guest list, checked at the door every time new content arrives. If the most recent name on the list already has a valid badge (is on the stack), nothing happens — move on. If not, door staff issue a brand-new badge for that name, and every name after it on the list, in order. The new badges aren't the old ones, reactivated. They're new badges, freshly cut, that happen to have the same names printed on them.</p>
+  </div>
+
+  <div class="spec">
+    <p><strong>When it runs:</strong> before certain insertions in <code>in body</code> — this course's engine calls it before character-token insertion and before inserting a formatting-element start tag (see Module 10's <code>DECISIONS.md</code> for exactly where; not universal in this simplified engine).</p>
+    <p><strong>Step 1:</strong> empty list → do nothing.</p>
+    <p><strong>Step 2:</strong> last entry is a marker, or is already on the stack of open elements → do nothing. <strong>This is the check that fails</strong> right after table cleanup has silently popped a formatting element off the stack without telling the list.</p>
+    <p><strong>Steps 3+:</strong> walk backward to the earliest entry needing recreation, then forward, inserting a fresh element for each and replacing the list's entry with the new object.</p>
+    <p>Each freshly inserted element goes through the exact same "appropriate place for inserting a node" call every other insertion in this engine uses — which is the entire reason reconstruction can end up fostering.</p>
+  </div>
+
+  <div class="callout crazy">
+    <span class="ct">The confused pair</span>
+    <p>"Reconstruction" sounds like it should mean rebuilding a damaged tree, or undoing a mistake. It doesn't undo anything — it's a proactive, routine check that runs on essentially every relevant insertion, most of the time finding nothing to do (step 2's early exit). The triple-<code>&lt;b&gt;</code> case is what happens on the rare token where step 2 doesn't exit early — not a special "repair mode," just the same routine check with a different answer.</p>
+  </div>
+
+  <div class="callout brain">
+    <span class="ct">How this connects</span>
+    <p>Reconstruction and <a href="concept_adoption_agency.html">the adoption agency</a> both read and write the active formatting elements list, but do opposite jobs: reconstruction adds entries back (as new elements) when the stack has fallen behind the list; the adoption agency removes/relocates entries when the stack and list disagree about nesting order, not membership. Reconstruction's fostering behavior is entirely inherited from <a href="concept_foster_parenting.html">foster parenting</a> — it contains no fostering logic of its own. Shares nothing with <a href="concept_reparenting_dom_api.html">DOM reparenting</a>.</p>
+  </div>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="concept_adoption_agency.html">← The adoption agency algorithm</a></span>
+  <span class="next"><span class="dir">Next</span><a href="concept_reparenting_dom_api.html">DOM "reparenting" (the unrelated sense) →</a></span>
+</div>
+<p style="margin-top:20px"><a href="concept_how_they_connect.html" style="font-family:var(--mono);font-size:13px;color:var(--pen)">↩ Back to the hub: how all four terms connect</a></p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept · DOM "Reparenting" — vocabulary web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Vocabulary web · Module 10 · Term 4 of 4 · The impostor</p>
+  <h1>DOM<em>"Reparenting"</em></h1>
+  <p class="thesis">A completely different thing that developers call "reparenting," using ordinary DOM methods, <b>after</b> a page has already parsed. Zero relationship to anything else on this page — included specifically because the name-collision causes real confusion.</p>
+</header>
+
+<section class="mod">
+  <div class="analogy">
+    <p>Someone, well after the building is fully constructed and occupied, physically picks up a piece of furniture and carries it to a different room. Nothing about the estate's gate rules, corridor rules, or guest lists is involved — the building is done being built. This is a mover, not a parser.</p>
+  </div>
+
+  <div class="spec">
+    <p><strong>What developers mean by it:</strong> calling <code>someElement.appendChild(otherElement)</code> (or <code>moveBefore</code>, <code>replaceChildren</code>, etc.) to move an already-existing DOM node to a new parent, typically to preserve component state (e.g. keeping an <code>&lt;iframe&gt;</code> or a video element from reloading when a UI framework re-renders it into a different part of the tree).</p>
+    <p><strong>Why it has nothing to do with this course:</strong> Prerequisite P5 and every module since is about <em>tree construction</em> — the algorithm that runs while the tokenizer is still feeding the parser tokens from a source string. DOM mutation methods like <code>appendChild</code> run <em>after</em> parsing is done, or completely independent of parsing altogether (e.g. building a tree from scratch with <code>document.createElement</code>). The attached reference course's own Module 01 says this directly, as lever 4 of "what you actually control": <em>"DOM mutation is not tree construction. <code>table.appendChild(document.createElement('p'))</code> puts a <code>&lt;p&gt;</code> inside a <code>&lt;table&gt;</code> and no rule in §13.2 has anything to say about it."</em></p>
+  </div>
+
+  <div class="callout crazy">
+    <span class="ct">The confused pair</span>
+    <p>Search results and casual usage often use "reparenting" for BOTH this DOM-mutation sense AND, loosely, for what foster parenting does ("the parser reparents the node"). The spec itself never uses "reparent" for foster parenting — it says "foster parenting" specifically, precisely to avoid this exact collision. If a source uses "reparenting" without qualification, check which sense it means before assuming it's about tree construction at all.</p>
+  </div>
+
+  <div class="callout brain">
+    <span class="ct">How this connects</span>
+    <p>It doesn't — that's the point of including it. <a href="concept_foster_parenting.html">Foster parenting</a>, <a href="concept_adoption_agency.html">the adoption agency</a>, and <a href="concept_reconstruction.html">reconstruction</a> are all tree-construction-time mechanisms, active only while the tokenizer is still producing tokens from source text. This is a runtime DOM-API operation with no connection to parsing at all. Sharing a page with the other three exists solely so a reader who arrives here confused about which "reparenting" a piece of documentation means leaves un-confused.</p>
+  </div>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="concept_reconstruction.html">← Reconstruct the active formatting elements</a></span>
+  <span class="next"></span>
+</div>
+<p style="margin-top:20px"><a href="concept_how_they_connect.html" style="font-family:var(--mono);font-size:13px;color:var(--pen)">↩ Back to the hub: how all four terms connect</a></p>
+
+</div>
+</body>
+</html>

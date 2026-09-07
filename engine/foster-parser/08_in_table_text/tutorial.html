@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 08 · "in table text" & the Whitespace Trap — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 08 · Build phase</p>
+  <h1>"in table text"<em>& the Whitespace Trap</em></h1>
+  <p class="thesis">Characters arrive one at a time (Prerequisite P1). This module is where that granularity finally matters: a whole run of them gets buffered, and <b>one single non-whitespace character anywhere in the run</b> is enough to drag every character in it — spaces included — out of the table together.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>In <span class="hi">&lt;table&gt;&lt;tr&gt;&lt;td&gt;a&lt;/td&gt;&lt;/tr&gt;\n&nbsp;&nbsp;x&lt;/table&gt;</span>, the newline and two spaces before <code>x</code> travel with it — fused into one <code>"\n  x"</code> text node, fostered before the table, even though the newline alone would have been fine.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../../prerequisites/prereq_tokens.html">P1 · Tokens</a>
+    <a class="tag" href="../07_what_refuses/tutorial.html">Module 07 · What refuses to be fostered</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Text doesn't arrive one person at a time — it arrives as a coach party. Security doesn't check them individually at the door; the whole party waits in a holding pen until the coach empties, and then one decision is made about all of them at once. If every passenger is a harmless space character, the whole party is waved through. If <em>one single passenger</em> is a real character, the entire coach is escorted out — spaces included, even the ones that were fine on their own.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li>A <code>Character</code> token arrives while <code>state.mode === 'in table'</code>. Instead of processing it, <code>enterInTableText()</code> clears <code>state.pendingCharacters</code>, saves the current mode as <code>state.originalMode</code>, and switches to <code>'in table text'</code>.</li>
+      <li>The triggering token is reprocessed under the new mode — <code>handleInTableText()</code> pushes it onto <code>pendingCharacters</code> and returns, emitting nothing.</li>
+      <li>Every further <code>Character</code> token does the same: buffer, emit nothing.</li>
+      <li>The first non-character token ends the run. <code>handleInTableText()</code> checks: does <em>any</em> buffered character fail the ASCII-whitespace test?</li>
+      <li>If yes: enable the flag, replay every buffered character through <code>insertCharacterAtAppropriatePlace</code> (Module 05), disable the flag. If no: replay them the same way, without enabling the flag.</li>
+      <li>Mode reverts to <code>originalMode</code>, and the token that ended the run is handed back to the ordinary dispatcher — it was never actually processed, only used as a signal that the run was over.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="io">
+    <span class="lab">Input — note the newline and two spaces before "x"</span>
+    <pre><code>&lt;table&gt;&lt;tr&gt;&lt;td&gt;a&lt;/td&gt;&lt;/tr&gt;
+  x&lt;/table&gt;</code></pre>
+    <span class="lab">Output — the leading whitespace travels with the "x"</span>
+    <pre class="tree">body
+├─ <span class="new">#text "\n  x"</span>
+└─ table
+   └─ tbody
+      └─ tr
+         └─ td
+            └─ #text "a"</pre>
+  </div>
+  <p>Four separate <code>Character</code> tokens (<code>\n</code>, space, space, <code>x</code>) go in; one fused, fostered text node comes out — the same fusion mechanism from Module 00, unchanged, now composing with buffering and fostering for the first time.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The whole decision, made once per run:</p>
+  <pre><code><span class="c">const pending = state.pendingCharacters;
+const hasNonWhitespace = pending.some(</span><span class="y">(ch) => !ASCII_WHITESPACE.test(ch)</span><span class="c">);
+
+if (hasNonWhitespace) {</span>
+  <span class="y">state.fosterParentingEnabled = true;
+  try {
+    for (const ch of pending) insertCharacterAtAppropriatePlace(state, ch);
+  } finally {
+    state.fosterParentingEnabled = false;
+  }</span><span class="c">
+} else {</span>
+  <span class="y">for (const ch of pending) insertCharacterAtAppropriatePlace(state, ch);</span><span class="c">
+}</span></code></pre>
+  <p>Notice both branches call the exact same loop — the only difference is whether the flag is enabled around it. Full rationale, including an honest analysis of why this module's buffering also (harmlessly) fires for content inside a <code>&lt;td&gt;</code>, where the real spec wouldn't buffer at all, is in <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Distinguish "in table text" (real buffering) from "in cell, no buffering at all" by mode alone — this engine's collapsed modes mean both look like <code>'in table'</code></li>
+        <li>Model a NULL character token inside a buffered run as its own parse-error case (the spec has one; no test input here needs it)</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Correctly buffer and flush a mixed whitespace/non-whitespace run, fostering all of it together</li>
+        <li>Correctly insert an all-whitespace run in place, with no parse error</li>
+        <li>Prove, via a real test case rather than an assumption, that its mode-collapsing simplification doesn't change tree-shape output even inside a <code>&lt;td&gt;</code></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/08_in_table_text
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run, first case shown)</span>
+    <pre><code>── The whitespace trap: one non-space character drags the whole buffered run out with it ──
+body
+  #text "\n  x"
+  table
+    tbody
+      tr
+        td
+          #text "a"
+
+OK — all assertions passed. Module 08 "in table text" whitespace trap verified against real browser output.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If the whitespace run ends up split into multiple text nodes instead of one fused <code>"\n  x"</code>, check that <code>insertCharacterAtAppropriatePlace</code> is being called once per buffered character in a simple loop — inserting the whole buffered string as one token instead would skip the fusion check entirely for the first character against whatever was already there.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>Why does the spec buffer characters at all here, instead of testing each one as it arrives and deciding immediately whether to foster it?</summary>
+    <p>Because the decision is a property of the whole run, not of any single character — a space arriving before you know whether a letter follows can't be classified yet. Insert it eagerly inside the table, and you can't retract that decision when the letter shows up two tokens later. Buffering defers the choice until the run is closed by a non-character token, then relocates the whole run atomically — which is also exactly what makes the fused text node in this module's test a single append rather than a sequence of corrections.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>DECISIONS.md admits this module's buffering fires even for content inside a <code>&lt;td&gt;</code>, where the real spec wouldn't buffer at all. Isn't that just wrong?</summary>
+    <p>It's a real divergence from the spec's <em>mechanism</em>, but not from its <em>output</em> — and DECISIONS.md doesn't paper over the difference, it proves the output claim directly with this module's first test case (content inside a real <code>&lt;td&gt;</code>, correctly landing inside it despite being routed through buffering). The reasoning: buffering only delays when <code>insertCharacterAtAppropriatePlace</code> gets called, never changes the current node it's called against, and Module 02's gate already filters on current-node identity regardless of the flag's spurious state. If a future module's test case ever contradicted that argument, this module's claim would need revisiting — but none does.</p>
+  </details>
+
+  <details>
+    <summary>Why replay the buffered characters one at a time through <code>insertCharacterAtAppropriatePlace</code> instead of just building the whole string and inserting it as one <code>TextNode</code> directly?</summary>
+    <p>Because "insert one big string" would have to separately reimplement the fusion check against whatever's already at the destination — and would still need a loop internally if the destination changes mid-run (it doesn't, in this module's tests, but nothing about the algorithm guarantees that in general). Calling the existing per-character function in a loop means Module 00's <code>tryFuseCharacter</code>, Module 05's location algorithm, and this module's buffering all compose for free, with zero new fusion logic — which is exactly the claim this module's DECISIONS.md makes about why no special-casing was needed.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 09 looks even more closely at the fusion this module leaned on without building anything new for it — specifically the case where fostered text lands next to a text node that <em>wasn't</em> part of the same buffered run at all, on the opposite side of an entire <code>&lt;table&gt;</code> element. Two text runs that were never adjacent in the source become indistinguishable in the DOM, which matters far beyond trivia for anything that reasons about DOM text boundaries — sanitizers included, which is where this course's Track 2 is headed.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../07_what_refuses/tutorial.html">← Module 07 — What refuses to be fostered</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../09_text_fusion/tutorial.html">Module 09 — Text-node fusion →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/08_in_table_text/src/tabletext.js</code>, <code>src/dispatch8.js</code>. Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>

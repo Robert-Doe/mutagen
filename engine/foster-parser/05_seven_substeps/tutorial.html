@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 05 · The Seven Substeps — Foster Parenting course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../templates/course.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">Track 1 · Module 05 · Build phase · First real-browser verification</p>
+  <h1>The Seven<em>Substeps</em></h1>
+  <p class="thesis">Every module so far proved <b>whether</b> foster parenting fires. This module proves <b>where the node actually goes</b> — and for the first time, checks the answer against a real browser's <code>DOMParser</code>, not just this engine's own internal consistency.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>For <span class="hi">&lt;div&gt;abc&lt;table&gt;def&lt;/table&gt;&lt;/div&gt;</span> and the nested-table case <span class="hi">&lt;table&gt;&lt;td&gt;&lt;table&gt;&lt;tr&gt;FOO&lt;/table&gt;&lt;/table&gt;</span>, this engine's output matches a real browser's <code>DOMParser</code> output byte-for-byte.</p>
+  </div>
+</header>
+
+<section class="mod" id="prereqs">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first if any term below is unfamiliar</span>
+    <a class="tag" href="../../prerequisites/prereq_appropriate_place.html">P5 · Appropriate place for inserting a node</a>
+    <a class="tag" href="../04_five_elements/tutorial.html">Module 04 · Why exactly five elements</a>
+  </div>
+</section>
+
+<section class="mod" id="analogy">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Security doesn't leave you in the hallway. Not outside the row, not outside the section. They walk you past every corridor, out the front gate of the <em>nearest</em> estate you're currently inside, and stand you on the pavement immediately to its left — the last position before that estate begins.</p>
+    <p>Which estate? Whichever one you're standing in right now. If that estate happens to sit inside a room of a <em>larger</em> estate, you get put on that room's floor — you've left one table, but you haven't necessarily left tables altogether. That's the nested-table case this module's second test proves: <code>FOO</code> gets walked out of the inner table and placed on the outer table's <code>&lt;td&gt;</code> floor — still very much inside a table overall.</p>
+  </div>
+</section>
+
+<section class="mod" id="steps">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><code>getAdjustedInsertionLocation(state)</code> checks Module 02's gate first. If it's false, return "current node, after last child" — exactly Module 01's original behavior.</li>
+      <li>If the gate is true, find the last <code>&lt;table&gt;</code> on the stack of open elements, scanning from the current node upward.</li>
+      <li>No table found at all → the fragment case (substep 4): insert inside the very first element on the stack.</li>
+      <li>That table has a parent node → the normal case (substep 5): insert inside that parent, immediately before the table.</li>
+      <li>That table has <em>no</em> parent (removed/moved mid-parse) → substeps 6–7: insert inside whatever element is immediately above the table on the stack.</li>
+      <li><code>insertCharacterAtAppropriatePlace</code>/<code>insertElementAtAppropriatePlace</code> call this algorithm and splice into whatever it returns — text still fuses with an existing sibling <code>TextNode</code> at that location, exactly as Module 00's <code>tryFuseCharacter</code> already implemented.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod" id="map">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>Nested-table stack, the instant "FOO" arrives</h4>
+      <ol class="stk">
+        <li><span>html</span></li>
+        <li><span>body</span></li>
+        <li><span>table</span><span class="note">outer</span></li>
+        <li><span>tbody</span></li>
+        <li><span>tr</span></li>
+        <li><span>td</span></li>
+        <li class="tgt"><span>table</span><span class="note">inner — last table</span></li>
+        <li><span>tbody</span></li>
+        <li class="tgt"><span>tr</span><span class="note">current node — fosters!</span></li>
+      </ol>
+    </div>
+    <div class="railbox">
+      <h4>Where "FOO" actually lands</h4>
+      <pre class="tree">td
+├─ <span class="new">#text "FOO"</span>   <span class="caret">← substep 5: before "last table"</span>
+└─ table   <span class="caret">← the inner table itself</span>
+   └─ tbody
+      └─ tr   <span class="caret">← stays empty</span></pre>
+    </div>
+  </div>
+  <p>"Last table" means nearest, not outermost — substep 2 finds the <em>inner</em> table first, because the stack is scanned from the current node upward, not from the bottom down.</p>
+</section>
+
+<section class="mod" id="code">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The whole algorithm, steps 2 through 7 collapsed into one function:</p>
+  <pre><code><span class="c">function getAdjustedInsertionLocation(state) {
+  const target = state.stack[state.stack.length - 1];
+  if (!isFosterParentingTarget(state)) {</span>
+    <span class="y">return { parent: target, index: target.children.length };</span><span class="c">  // step 3
+  }
+  // ...find lastTableIndex by scanning the stack from the top...
+  if (lastTableIndex === -1) {</span>
+    <span class="y">return { parent: stack[0], index: stack[0].children.length };</span><span class="c">  // substep 4
+  }
+  const lastTable = stack[lastTableIndex];
+  if (lastTable.parent) {</span>
+    <span class="y">return { parent: lastTable.parent, index: lastTable.parent.children.indexOf(lastTable) };</span><span class="c">  // substep 5
+  }</span>
+  <span class="y">return { parent: stack[lastTableIndex - 1], index: stack[lastTableIndex - 1].children.length };</span><span class="c">  // substeps 6-7
+}</span></code></pre>
+  <p>Note step 3's fallback is byte-identical in effect to Module 01's original hardcoded insertion — that equivalence is what makes it safe to route <em>every</em> insertion through this one function from now on, foster-parenting or not. Full rationale, including why this module can't simply reuse Module 01's <code>MODES['in body']</code> the way Module 03 did, is in <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod" id="limits">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Redirect into a <code>&lt;template&gt;</code>'s contents (substeps 1, 3) — no <code>DocumentFragment</code> node kind until Module 11</li>
+        <li>Verify the detached-table case (substeps 6–7) against a real browser — requires script-interleaved parsing, out of scope entirely</li>
+        <li>Close a table properly with <code>&lt;/table&gt;</code> when the current node is several levels deeper (e.g. inside a <code>&lt;tr&gt;</code>) — needs "generate implied end tags," not yet built</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Compute the exact same insertion point a real browser computes, for both a simple fusion case and a nested-table case</li>
+        <li>Correctly fuse fostered text across an inserted element boundary (the <code>abc</code>+<code>def</code> → <code>abcdef</code> case)</li>
+        <li>Foster from a <code>&lt;tr&gt;</code> while correctly <em>not</em> fostering from a <code>&lt;td&gt;</code>, inside the same real parse</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">Command</span>
+    <pre><code>cd track1-core/05_seven_substeps
+node test/demo.js</code></pre>
+    <span class="lab">Expected output (captured verbatim from a real run)</span>
+    <pre><code>── Case 1: &lt;div&gt;abc&lt;table&gt;def&lt;/table&gt;&lt;/div&gt; ──
+body
+  div
+    #text "abcdef"
+    table
+(stopped at token #15: EOF — expected, this engine doesn't implement EOF handling)
+
+── Case 2: &lt;table&gt;&lt;td&gt;&lt;table&gt;&lt;tr&gt;FOO&lt;/table&gt;&lt;/table&gt; (nested table) ──
+body
+  table
+    tbody
+      tr
+        td
+          #text "FOO"
+          table
+            tbody
+              tr
+(stopped at token #11: inner &lt;/table&gt; — expected; the tree built so far is already complete and correct)
+
+OK — all assertions passed. Module 05 adjusted insertion location verified against real browser output.</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p>If Case 2's output shows <code>#text "FOO"</code> nested <em>inside</em> the inner <code>&lt;tr&gt;</code> instead of inside the outer <code>&lt;td&gt;</code>, the stack scan in <code>getAdjustedInsertionLocation</code> is finding the wrong "last table" — check it scans from the top of the stack downward, not the bottom up, so it finds the <em>nearest</em> table, not the outermost.</p>
+  </div>
+</section>
+
+<section class="mod" id="brain">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>This module's DECISIONS.md admits substeps 6–7 (the detached-table case) are implemented but never verified against a real browser. Given that, what exactly does this module's test suite actually establish about those two substeps — and what would it take to establish more?</summary>
+    <p>It establishes only that the code doesn't crash and produces <em>some</em> defined, internally-consistent answer for a hand-constructed state where a table element has no parent — nothing about whether that answer matches what a real browser's parser would do when a <code>&lt;script&gt;</code> actually calls <code>table.remove()</code> mid-parse. To establish more, you'd need an engine capable of incremental, script-interleaved parsing (running a real JS engine's DOM mutation calls between tokens) — a fundamentally different, much larger undertaking than this course's static-string parser, and explicitly out of scope per <code>ROADMAP.md</code>. This is a good example of the difference between "the code runs without error" and "the code is verified" — this course tries hard to only claim the second when it's actually earned.</p>
+  </details>
+</section>
+
+<section class="mod" id="faq">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+
+  <details>
+    <summary>Why does this module bother implementing the fragment case (substep 4) and the detached-table case (substeps 6–7) at all, if neither is reachable by this engine's real parsing yet?</summary>
+    <p>Because "appropriate place for inserting a node" is one algorithm with five branches in the real spec, and implementing four of five would leave <code>getAdjustedInsertionLocation</code> silently wrong (or crashing) for inputs a later module — Module 11, specifically — will need to exercise for real. Writing the whole algorithm now, with honest annotations about which branches are browser-verified versus only self-consistent, means Module 11 extends this file instead of rewriting it.</p>
+  </details>
+
+  <details>
+    <summary>The demo compares strings that include indentation and exact formatting. Isn't that a fragile way to test a tree structure — wouldn't a structural/recursive comparison be more robust?</summary>
+    <p>It's deliberately the more rigid choice, not an oversight. A structural comparison (e.g. walking both trees recursively and comparing node-by-node) could theoretically pass while still hiding a formatting or ordering bug that a byte-for-byte string comparison would catch immediately. Since the entire point of this module is "does this match a real browser, exactly" — not "does this roughly resemble a real browser" — the strictest available check is the right one, consistent with Module 00's FAQ answer about why its own assertions are exact rather than approximate.</p>
+  </details>
+
+  <details>
+    <summary>Case 2 stops partway through — at the inner <code>&lt;/table&gt;</code> — rather than finishing the whole input. Why is that an acceptable place to call this module's proof complete?</summary>
+    <p>Because everything left unprocessed after that point only <em>removes</em> elements from the stack (three more end tags: the remaining <code>&lt;/table&gt;</code>, and the implied <code>&lt;/body&gt;</code>/<code>&lt;/html&gt;</code>) — none of it inserts anything new. The tree this module compares against a real browser is therefore already in its final, complete shape by the time the engine hits a boundary it doesn't yet handle. DECISIONS.md states this reasoning explicitly rather than leaving it implicit, since "the test passed" and "the test proved what it claims to prove" are different questions worth answering separately.</p>
+  </details>
+</section>
+
+<section class="mod" id="next">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Module 06 proves this same <code>getAdjustedInsertionLocation</code> call isn't just for HTML elements and characters — foreign elements (SVG/MathML) and formatting elements reconstructed by the (not-yet-built) active-formatting-elements algorithm both route through the exact same function, unchanged. It also revisits the 2013 spec bug this course's own colophon cites: an early draft claimed foreign-element insertion was immune to foster parenting, which was wrong for exactly one input shape — this course's engine will be able to demonstrate why.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Previous</span><a href="../04_five_elements/tutorial.html">← Module 04 — Why exactly five elements</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../06_what_gets_fostered/tutorial.html">Module 06 — What gets fostered →</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>track1-core/05_seven_substeps/src/location.js</code>, <code>src/dispatch5.js</code>. Full rationale, including the real-browser verification methodology: <a href="DECISIONS.md">DECISIONS.md</a>. Terms defined here are logged in the root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations in <a href="../../REFERENCES.md">REFERENCES.md</a>.</p>
+</div>
+
+</div>
+</body>
+</html>
