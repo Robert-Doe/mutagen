@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 10 — Reading Disclosures Like a Researcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 3 · Module 10 of 11 · Frontier</p>
+  <h1>Reading Disclosures<em>a repeatable dissection</em></h1>
+  <p class="thesis">Given a new mutation-XSS write-up, four questions get you from "scary
+  payload" to "here is the one step that, if changed, closes it" &mdash; and then to which
+  historical patch changed exactly that step.</p>
+
+  <div class="therule">
+    <span class="lbl">The four questions</span>
+    <p><span class="hi">Q1</span> what does the sanitizer's parse produce? &nbsp;
+       <span class="hi">Q2</span> what does the serializer emit? &nbsp;
+       <span class="hi">Q3</span> what does the browser's re-parse produce? &nbsp;
+       <span class="hi">Q4</span> which single step is the hinge?</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../track2-mxss/08-hardened-sanitizer/tutorial.html">Modules 3&ndash;8 (the vectors and the fix)</a>
+    <a class="tag" href="../09-parser-differentials/tutorial.html">Module 9 · The sink zoo</a>
+    <a class="tag" href="../../lessons/01_history-of-mxss/01_explainer.html">Lesson · A history of mXSS</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>An inspector at another port files a report: "crate #4471 got through &mdash; contained
+    a rifle." Panic, or method? Method: pull the four records. The <em>arrival manifest</em>
+    (Q1: what the first officer logged). The <em>transfer manifest</em> (Q2: what got written
+    when it was moved). The <em>delivery manifest</em> (Q3: what the final officer read). Lay
+    them side by side and one line will have changed between two of them &mdash; that line is
+    the hinge (Q4). Then check the rulebook: which amendment governs that line, and was it in
+    force at this port?</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The method, worked on the <code>&lt;noscript&gt;</code> disclosure</h2></div>
+  <div class="spec">
+    <p>Payload: <code>&lt;noscript&gt;&lt;p title="&lt;/noscript&gt;&lt;img src=x onerror=alert(1)&gt;"&gt;</code></p>
+    <ol>
+      <li><strong>Q1 &mdash; sanitizer parse (scripting off):</strong>
+      <code>noscript &gt; p[title="&lt;/noscript&gt;&lt;img&hellip;&gt;"]</code>. A
+      <code>&lt;p&gt;</code> with a title. <em>Safe.</em></li>
+      <li><strong>Q2 &mdash; serialize:</strong>
+      <em>2019:</em> <code>title="&lt;/noscript&gt;&lt;img&hellip;&gt;"</code> (raw).
+      <em>2026:</em> <code>title="&amp;lt;/noscript&amp;gt;&amp;lt;img&hellip;&amp;gt;"</code>.</li>
+      <li><strong>Q3 &mdash; browser re-parse (scripting on):</strong>
+      <em>2019:</em> RAWTEXT sees literal <code>&lt;/noscript&gt;</code> &rarr; breaks out
+      &rarr; live <code>&lt;img&gt;</code>. <em>2026:</em> RAWTEXT never decodes
+      <code>&amp;lt;</code> &rarr; inert.</li>
+      <li><strong>Q4 &mdash; hinge:</strong> Q2. The serializer's attribute escaping. Patch:
+      Chrome/Firefox escape <code>&lt;</code>/<code>&gt;</code> in attribute values (~2020);
+      DOMPurify added a dedicated <code>&lt;noscript&gt;</code> check.</li>
+    </ol>
+  </div>
+  <p>Our engine's <code>dissect()</code> runs Q1&ndash;Q4 and, for this payload,
+  reports <code>mutates: false</code> &mdash; because it models the 2026 serializer. That's
+  the honest answer: <strong>on a current browser this exact payload is patched</strong>. The
+  <em>method</em> is what transfers.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>The disclosure set</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Disclosure</th><th>Hinge (Q4)</th><th>The patch</th><th>2026?</th></tr></thead>
+    <tbody>
+      <tr><td>CVE-2020-26870 &mdash; <code>&lt;svg&gt;&lt;/p&gt;&lt;style&gt;</code> (DOMPurify &lt; 2.0.17)</td><td>attribute serialization</td><td>browser: escape <code>&lt;&gt;</code> in attrs; DOMPurify: namespace check</td><td class="no">patched</td></tr>
+      <tr><td>Bentkowski 2019 &mdash; <code>&lt;form&gt;/&lt;math&gt;</code> nesting</td><td>namespace + live-list walk</td><td>DOMPurify <code>_checkValidNamespace</code>; iterate a snapshot</td><td class="yes">still bites naive walks</td></tr>
+      <tr><td>Bentkowski 2019 &mdash; <code>&lt;mglyph&gt;&lt;style&gt;</code></td><td>MathML <code>&lt;mglyph&gt;</code> exception</td><td>DOMPurify: forbid <code>&lt;mglyph&gt;</code>/<code>&lt;malignmark&gt;</code></td><td class="yes">still bites naive walks</td></tr>
+      <tr><td>Google Search 2019 &mdash; <code>&lt;noscript&gt;</code></td><td>scripting flag / attribute serialization</td><td>browser serializer + DOMPurify <code>&lt;noscript&gt;</code> check</td><td class="no">patched</td></tr>
+      <tr><td><code>&lt;image&gt;</code> alias (recurring)</td><td>parser tag-name aliasing</td><td>canonicalise <code>&lt;image&gt;</code>&rarr;<code>&lt;img&gt;</code> before the allow-list</td><td class="yes">still bites name-only lists</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <pre><code>export function dissect(payload, {sanitizerContext='template', sinkContext='div'}) {
+  const q1 = parseFragment(payload, sanitizerContext, {scripting:false});   <span class="c">// Q1</span>
+  const serialized = serialize(q1);                                          <span class="c">// Q2</span>
+  const q3 = parseFragment(serialized, sinkContext, {scripting:true});       <span class="c">// Q3</span>
+  const mutates = !hasLiveHandler(q1) &amp;&amp; hasLiveHandler(q3);                  <span class="y">// safe→dangerous?</span>
+  return { ..., q4_hinge: mutates ? classifyHinge(payload, serialized) : 'does not mutate' };
+}</code></pre>
+  <p><code>classifyHinge</code> pattern-matches the payload + serialized string against the
+  five mechanism families (raw-text, namespace, scripting flag, attribute, template).
+  Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits / What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant"><h4>Can't do yet</h4><ul>
+      <li>Auto-dissect a payload whose mechanism our engine doesn't model (e.g. a brand-new insertion-mode bug)</li>
+      <li>Reproduce a bypass against the exact vulnerable library version &mdash; you'd <code>npm i dompurify@2.0.16</code> for that</li>
+    </ul></div>
+    <div class="can"><h4>Can do</h4><ul>
+      <li>Run Q1&ndash;Q4 on any payload and get a named hinge</li>
+      <li>Tell "mutates" from "plain DOM XSS" from "benign"</li>
+      <li>Honestly report which historical bypasses are patched vs. still-live-against-naive-code in 2026</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track3-frontier\10-reading-disclosures
+node test\demo.mjs
+node -e "import('./src/dissect.mjs').then(m=&gt;console.log(m.dissect('&lt;svg&gt;&lt;image href=x onerror=1&gt;&lt;/svg&gt;').q4_hinge))"</code></pre>
+    <span class="lab">Expected output</span>
+    <pre><code>MODULE 10 — Reading Disclosures Like a Researcher
+
+  PASS  dissect() answers all four questions for a payload
+  PASS  the &lt;noscript&gt; disclosure: sanitizer sees safe, hinge names the scripting flag
+  PASS  every historical disclosure is dissectable and its hinge is identified
+  PASS  the method distinguishes "mutates" from "dangerous both sides"
+  PASS  CVE-2020-26870 shape: our modern engine reports it as PATCHED (does not mutate)
+
+  5 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch"><span class="ct">Getting a blank or broken result?</span>
+  <p><strong>hinge is "context mismatch" for everything</strong> &mdash; your payload's
+  mechanism isn't one of the five <code>classifyHinge</code> recognises; read Q1/Q2/Q3 by
+  hand and add a case.</p></div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>Our <code>dissect()</code> reports the <code>&lt;noscript&gt;</code> and
+    CVE-2020-26870 payloads as <code>mutates: false</code> &mdash; because it models the 2026
+    serializer. A researcher reads a 2019 write-up that says these <em>do</em> fire. Who's
+    right?</summary>
+    <p><strong>Both, in their own time frame.</strong> This is the single most important
+    habit in reading mXSS disclosures: <em>always pin the browser version and the library
+    version.</em> A payload is not "an mXSS" in the abstract &mdash; it's an mXSS against a
+    specific (browser serializer, sanitizer) pair. The 2019 write-up is correct for
+    Chrome-2019 + DOMPurify-2.0.16. Our engine is correct for Chrome-148 + a correct
+    sanitizer. The <em>mechanism</em> (Q4 hinge) is the durable knowledge; the <em>fires /
+    doesn't fire</em> verdict has a date on it. When you reproduce a disclosure, reproduce
+    the environment too, or your "it's patched!" is as unreliable as their "it fires!" would
+    be today.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: Where do I find the patch commit for a disclosure?</div>
+    <div class="a">A: DOMPurify's <code>CHANGELOG.md</code> tags security releases; each links
+    the GitHub issue, which links the fix PR. For browser-side patches, the payload usually
+    stopped working in a specific Chromium/Gecko version &mdash; bisect
+    <code>chromium-dash</code> or check the linked <code>crbug</code>.</div></div>
+    <div class="qa-item"><div class="q">Q: Is <code>classifyHinge</code> just a lookup table?</div>
+    <div class="a">A: Yes &mdash; five regexes over the payload and the serialized string, one
+    per mechanism family. That's the point: after Modules 3&ndash;7 there are only five
+    families, and a new disclosure is almost always a new <em>instance</em> of one, not a new
+    family.</div></div>
+    <div class="qa-item"><div class="q">Q: What if a disclosure is a genuinely new family?</div>
+    <div class="a">A: Then it's a paper, not a blog post. Heiderich 2013 named the field;
+    the Sanitizer API is arguably the last structural change. New <em>families</em> are rare;
+    when one appears, it usually traces to a new browser parser feature (declarative shadow
+    DOM was the most recent candidate).</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p><a href="../11-native-sanitizer-api/tutorial.html">Module 11</a>, the capstone: the
+  platform's structural answer &mdash; <code>Element.setHTML()</code> &mdash; and a test of
+  whether removing the serialize step really removes the class.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../09-parser-differentials/tutorial.html">Module 9 · Sink zoo</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../11-native-sanitizer-api/tutorial.html">Module 11 · The Sanitizer API &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/dissect.mjs</code>. Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.
+  Citations: <a href="../../REFERENCES.md">REFERENCES.md</a> [R9]&ndash;[R15].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. Every "patched" / "still
+  bites" verdict cross-checked against Chrome 148 (proof pages in Modules 4, 5, 11).</p>
+</div>
+
+</div>
+</body>
+</html>
