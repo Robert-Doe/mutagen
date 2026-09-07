@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 1 — Foreign Content &amp; the Fragment Parser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 1 · Module 1 of 11 · The Engine</p>
+  <h1>Foreign Content<em>&amp; the Fragment Parser</em></h1>
+  <p class="thesis">Before any attack, the machine. This module proves the tree builder
+  <b>switches parsing rules at <code>&lt;svg&gt;</code> and <code>&lt;math&gt;</code></b>, switches
+  back at integration points, and gets kicked out by breakout tags &mdash; and that
+  <code>element.innerHTML = "&hellip;"</code> starts the parser in whatever mode the context
+  element dictates.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>The string <span class="hi">&lt;style&gt;&lt;img src=x onerror=1&gt;</span> is a single
+    inert text node when its parent is an HTML <code>&lt;style&gt;</code>, and a live
+    <code>&lt;img&gt;</code> element when its parent is an SVG <code>&lt;style&gt;</code>.
+    Same characters. The parent's namespace decides.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../prerequisites/prereq_namespaces.html">Prereq 1 · Namespaces</a>
+    <a class="tag" href="../../prerequisites/prerequisites.html#">Prereq 4 · Parsing vs serialization</a>
+    <a class="tag" href="../../prerequisites/prerequisites.html#">Prereq 6 · Content models</a>
+    <a class="tag" href="concept_how_they_connect.html">Vocabulary web · namespace / integration point / foreign content</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Kofi's customs shed has the General Goods hall and the fishing co-operative's hall.
+    Walk a crate through the door marked <code>&lt;svg&gt;</code> and you are now in the
+    co-op's hall, under the co-op's rulebook. In there, a sealed drum labelled "engine oil"
+    (<code>&lt;style&gt;</code>) is <em>opened and its contents sorted</em> &mdash; the co-op
+    doesn't have the General-Goods rule that says "drums labelled oil are set aside unopened".</p>
+    <p>Three things can send you back to the General Goods rulebook. One is a marked door in
+    the co-op wall &mdash; <code>&lt;foreignObject&gt;</code>, <code>&lt;desc&gt;</code>,
+    <code>&lt;mtext&gt;</code> &mdash; an <strong>integration point</strong>, put there on
+    purpose. The second is turning up in the co-op hall holding something that obviously
+    belongs in General Goods &mdash; a pallet of <code>&lt;p&gt;</code>, a crate of
+    <code>&lt;table&gt;</code>. Security doesn't sort it; they walk you and it all the way
+    back out. That's a <strong>breakout tag</strong>. The third is the one that matters most
+    for the attacks: someone hands the officer a crate and says <em>"check this as if it were
+    already sitting inside drum #47"</em>. That instruction &mdash; the
+    <strong>context element</strong> &mdash; is <code>element.innerHTML = "&hellip;"</code>.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li>The tree builder starts in the HTML namespace. Every element it inserts is HTML.</li>
+      <li>It processes a <code>&lt;svg&gt;</code> (or <code>&lt;math&gt;</code>) start tag: it
+      creates that element in the <strong>SVG</strong> (MathML) namespace and pushes SVG
+      (MathML) onto its namespace context.</li>
+      <li>While the namespace context is foreign: <code>&lt;style&gt;</code>,
+      <code>&lt;title&gt;</code>, <code>&lt;textarea&gt;</code>, <code>&lt;script&gt;</code>
+      do <strong>not</strong> switch the tokenizer to a text mode. Their children are parsed
+      as elements. Self-closing works. <code>&lt;![CDATA[&hellip;]]&gt;</code> is text.</li>
+      <li>If it hits an <strong>integration point</strong> element
+      (<code>&lt;foreignObject&gt;</code>, <code>&lt;desc&gt;</code>, <code>&lt;title&gt;</code>
+      in SVG; <code>&lt;mi&gt;&lt;mo&gt;&lt;mn&gt;&lt;ms&gt;&lt;mtext&gt;</code> in MathML), it
+      parses that element's <em>content</em> under HTML rules again.</li>
+      <li>If it hits a <strong>breakout tag</strong> (<code>&lt;b&gt; &lt;i&gt; &lt;p&gt;
+      &lt;br&gt; &lt;img&gt; &lt;table&gt; &lt;div&gt;</code>&hellip;) while foreign, it
+      <span class="stamp">PARSE ERROR</span> pops every foreign element off the stack, back
+      to HTML, and reprocesses the tag.</li>
+      <li>One exception inside a MathML text integration point: <code>&lt;mglyph&gt;</code> and
+      <code>&lt;malignmark&gt;</code> stay in MathML. (This is the hinge of Module 5.)</li>
+      <li>For a <em>fragment</em> parse (<code>innerHTML</code>), the context element seeds
+      step 1: a <code>&lt;textarea&gt;</code> context starts in RCDATA, a <code>&lt;svg&gt;</code>
+      context starts foreign, a <code>&lt;div&gt;</code> context starts normal.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>&lt;style&gt;&lt;img src=x onerror=1&gt;&lt;/style&gt;  (HTML)</h4>
+      <pre class="tree">#fragment
+└─ style
+   └─ <span class="new">#text "&lt;img src=x onerror=1&gt;"</span>   <span class="caret">inert</span></pre>
+    </div>
+    <div class="railbox">
+      <h4>&lt;svg&gt;&lt;style&gt;&lt;img src=x onerror=1&gt;&lt;/style&gt;&lt;/svg&gt;</h4>
+      <pre class="tree">#fragment
+└─ svg {svg}
+   └─ style {svg}
+      └─ <span class="new">img {svg} onerror="1"</span>   <span class="caret">a real element</span></pre>
+    </div>
+  </div>
+  <p>The <code>&lt;img&gt;</code> is a <em>breakout tag</em>, so a bare
+  <code>&lt;svg&gt;&lt;style&gt;&lt;img&gt;</code> actually ejects to HTML &mdash; but
+  <code>&lt;svg&gt;&lt;style&gt;&lt;image&gt;</code> or any non-breakout child stays SVG.
+  Module 5 uses exactly this gap.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The engine is <code>engine/mxss-lab/lab.mjs</code>. The foreign-content decision, in
+  <code>insertStart</code>:</p>
+  <pre><code><span class="c">// while the namespace context is foreign …</span>
+if (curNs() !== HTML) {
+  if (BREAKOUT.has(name)) {
+    <span class="c">// … a common HTML tag pops us all the way back to HTML</span>
+    while (stack.length &gt; 1 &amp;&amp; curNs() !== HTML) { stack.pop(); nsStack.pop(); }
+  } else {
+    <span class="c">// … otherwise insert a FOREIGN element in the current namespace</span>
+    const el = new El(name, curNs());
+    <span class="g">const isIntegration =
+      (ns === SVG   &amp;&amp; SVG_HTML_INTEGRATION.has(name)) ||
+      (ns === MATHML &amp;&amp; MATHML_TEXT_INTEGRATION.has(name));</span>
+    nsStack.push(isIntegration ? HTML : ns);   <span class="c">// integration point → HTML rules for content</span>
+  }
+}</code></pre>
+  <p>And the fragment context, in <code>build()</code>:</p>
+  <pre><code>if (RAWTEXT.has(context)) { seedMode = 'rawtext'; }      <span class="c">// &lt;style&gt; context</span>
+else if (RCDATA.has(context)) { seedMode = 'rcdata'; }   <span class="c">// &lt;textarea&gt; context</span>
+else if (context === 'svg') nsStack.push(SVG);           <span class="c">// &lt;svg&gt; context</span></code></pre>
+  <p>Full rationale, and why we wrote a fresh 450-line engine instead of bending the
+  Foster Parenting course's <code>dispatch14</code> (which throws
+  <code>NotImplementedYet</code> on <code>&lt;noscript&gt;</code>, <code>&lt;template&gt;</code>
+  in head, and foreign content): <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Show a full mutation-XSS round trip &mdash; that needs the serializer (Module 2)</li>
+        <li>Break a real sanitizer &mdash; Modules 3&ndash;8</li>
+        <li>Model the full adoption-agency / table machinery &mdash; that lives in the
+        copied Foster Parenting engine, which this course links to rather than re-teaches</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Parse any fragment in any context element and read back the namespace of every node</li>
+        <li>Predict whether a given <code>&lt;style&gt;</code> holds text or elements</li>
+        <li>Point at the exact rule (integration point / breakout / mglyph exception) that
+        put a node where it is</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track1-engine\01-foreign-content-fragment
+node test\demo.mjs</code></pre>
+    <span class="lab">Expected output (captured from a real run)</span>
+    <pre><code>MODULE 1 — Foreign Content &amp; the Fragment Parser
+
+  PASS  svg &lt;style&gt; is NOT rawtext: &lt;def&gt; is an element, not text
+  PASS  HTML &lt;style&gt; IS rawtext: &lt;img&gt; is text
+  PASS  &lt;svg&gt;&lt;p&gt; breaks out: &lt;p&gt; is HTML, sibling of &lt;svg&gt;
+  PASS  SVG integration point &lt;desc&gt;: &lt;img&gt; inside is a live HTML element
+  PASS  MathML text integration point &lt;mtext&gt;: &lt;b&gt; inside is HTML
+  PASS  CDATA is text directly in foreign content (not an integration point)
+  PASS  CDATA inside an HTML integration point is a bogus comment (HTML rules)
+  PASS  context element &lt;textarea&gt; drops the parse straight into RCDATA
+  PASS  context element &lt;div&gt; parses the same string as a LIVE element
+  PASS  svg case-correction: foreignobject -&gt; foreignObject
+
+  10 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>"Cannot find module '../../../engine/mxss-lab/lab.mjs'"</strong> &mdash; you are
+    not in the module folder. <code>cd</code> into
+    <code>track1-engine\01-foreign-content-fragment</code> first; the path is relative to it.
+    <br><strong>"SyntaxError: Unexpected token 'export'"</strong> &mdash; your Node is older
+    than v14. Run <code>node --version</code>; you need v20+.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary><code>&lt;svg&gt;&lt;desc&gt;&lt;svg&gt;&lt;style&gt;&lt;img src=x onerror=1&gt;&lt;/style&gt;</code>
+    &mdash; where does that <code>&lt;img&gt;</code> end up, and what namespace is it?</summary>
+    <p><strong>An HTML <code>&lt;img&gt;</code>, and a sibling of the inner
+    <code>&lt;svg&gt;</code> &mdash; the <code>&lt;style&gt;</code> ends up empty.</strong>
+    Work the stack: outer <code>&lt;svg&gt;</code> &rarr; SVG. <code>&lt;desc&gt;</code> &rarr;
+    HTML integration point, content parses as HTML. The inner <code>&lt;svg&gt;</code> tag,
+    processed under HTML rules, <em>re-enters</em> foreign content, so the inner
+    <code>&lt;style&gt;</code> is SVG (not rawtext). Then <code>&lt;img&gt;</code> is a
+    <strong>breakout tag</strong>: it pops the inner <code>&lt;style&gt;</code> and the inner
+    <code>&lt;svg&gt;</code> off the stack, back to the <code>&lt;desc&gt;</code>'s HTML
+    context, and inserts the <code>&lt;img&gt;</code> there in the HTML namespace. Verified
+    against Chrome 148: <code>img.parentElement</code> is <code>&lt;desc&gt;</code>,
+    <code>style.childNodes.length</code> is 0. The lesson: "text or element, and where" is
+    never answerable from the tag alone &mdash; you walk the whole stack of namespaces above
+    it. Run our engine to see the same tree:
+    <code>node -e "import('./src/foreign.mjs').then(m=&gt;console.log(m.treeString(m.parseFragment('&lt;svg&gt;&lt;desc&gt;&lt;svg&gt;&lt;style&gt;&lt;img src=x onerror=1&gt;&lt;/style&gt;','body')).join(String.fromCharCode(10))))"</code>.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: Is switching namespace a bug?</div>
+    <div class="a">A: No &mdash; it is the whole point of being able to put SVG and MathML
+    inside HTML without a separate document. It is specified, intentional, and every browser
+    does it identically. The "bug", when there is one, is in code that reasons about markup
+    without accounting for it.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Why does <code>&lt;svg&gt;&lt;style&gt;</code> not go rawtext, when the whole reason <code>&lt;style&gt;</code> exists is to hold CSS?</div>
+    <div class="a">A: Inside SVG, styling is done with SVG's own <code>&lt;style&gt;</code>
+    element, which is an ordinary element node in the SVG DOM &mdash; its text content is CSS,
+    but the <em>parser</em> doesn't give it special tokenizer treatment. Only the HTML parser
+    has the RAWTEXT shortcut, and only for the HTML <code>&lt;style&gt;</code>.</div></div>
+
+    <div class="qa-item"><div class="q">Q: The prereq said the classic <code>&lt;svg&gt;&lt;style&gt;</code> payload is patched. So why build this module?</div>
+    <div class="a">A: Because the <em>mechanism</em> &mdash; "a node's meaning depends on the
+    namespace of its ancestors, and serialize+reparse can change that" &mdash; is not
+    patched and cannot be. Individual payloads get closed by serialization tweaks; the class
+    stays open. Module 5 shows live 2026 variants.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Does <code>DOMParser</code> really parse foreign content the same as <code>innerHTML</code>?</div>
+    <div class="a">A: For namespaces and integration points, yes. They differ on the
+    <em>scripting flag</em> (Module 4) and on document-vs-fragment wrapper elements, not on
+    foreign content.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>You can now parse a fragment in any context and know the namespace of every node. But a
+  sanitizer doesn't hand the browser a tree &mdash; it hands it a <em>string</em>, produced
+  by serialization. <a href="../02-serializer-roundtrip/tutorial.html">Module 2</a> builds the
+  <code>innerHTML</code> getter algorithm and shows the first case where
+  <code>parse(serialize(parse(x)))</code> comes back as something <code>parse(x)</code> never
+  was.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../../prerequisites/prereq_scripting-flag.html">Prereq · Scripting flag</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../02-serializer-roundtrip/tutorial.html">Module 2 · The Serializer &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/foreign.mjs</code> + <code>engine/mxss-lab/lab.mjs</code>. Rationale:
+  <a href="DECISIONS.md">DECISIONS.md</a>. Vocabulary web:
+  <a href="concept_how_they_connect.html">how the foreign-content terms connect</a>. Terms:
+  root <a href="../../GLOSSARY.md">GLOSSARY.md</a>. Citations: <a href="../../REFERENCES.md">REFERENCES.md</a>
+  ([R1], [R2]).</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. All ten test assertions were
+  captured from Chrome 148 <code>DOMParser</code> first, then verified against our engine.</p>
+</div>
+
+</div>
+</body>
+</html>

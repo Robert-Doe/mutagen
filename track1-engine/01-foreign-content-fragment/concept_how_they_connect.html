@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vocabulary web — namespace / integration point / foreign content</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Module 1 · Vocabulary web</p>
+  <h1>The SVG Stuff<em>six terms people merge into one</em></h1>
+  <p class="thesis">"The SVG stuff" is not one idea. It is six, and Module 5's bypasses turn
+  on telling them apart.</p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>Side by side</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Term</th><th>What it actually is</th><th>Lives where</th></tr></thead>
+    <tbody>
+      <tr><td><strong>namespace</strong></td><td>a label on every element node (<code>el.namespaceURI</code>): one of HTML, SVG, MathML. Fixed at creation.</td><td>on the node, forever</td></tr>
+      <tr><td><strong>foreign content</strong></td><td>a parser <em>mode</em>: "I am currently inside <code>&lt;svg&gt;</code> or <code>&lt;math&gt;</code>, so use SVG/MathML tokenizer rules."</td><td>the parser's state, transient</td></tr>
+      <tr><td><strong>integration point</strong></td><td>a specific foreign element (<code>&lt;foreignObject&gt; &lt;desc&gt; &lt;title&gt;</code> in SVG; <code>&lt;mi&gt;&lt;mo&gt;&lt;mn&gt;&lt;ms&gt;&lt;mtext&gt;</code> in MathML) whose <em>content</em> is parsed with HTML rules.</td><td>a fixed list in the spec</td></tr>
+      <tr><td><strong>adjusted current node</strong></td><td>the element whose parsing rules apply right now: normally the top of the stack, but the <em>context element</em> during a fragment parse.</td><td>computed per token</td></tr>
+      <tr><td><strong>fragment parsing context</strong></td><td>the element you pretend the string is already inside, when doing <code>element.innerHTML = str</code>. Seeds the insertion mode.</td><td>an argument to the parse</td></tr>
+      <tr><td><strong>the SVG DOM</strong></td><td>the API surface of an SVG element once parsed (<code>getBBox()</code>, <code>ownerSVGElement</code>&hellip;). Nothing to do with parsing.</td><td>runtime, after the tree exists</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The chain — where each one sits</h2></div>
+  <div class="spec">
+<pre class="tree">source string
+   │
+   ▼
+┌──────────────────────── the parser ────────────────────────┐
+│  reads tokens ; keeps a STACK of open elements             │
+│                                                            │
+│  &lt;svg&gt;  ── enters ──►  <span class="new">FOREIGN CONTENT mode</span> ── every element it     │
+│                          now inserts gets namespace = SVG  │
+│                                                            │
+│  &lt;desc&gt; ── is an ──►  <span class="new">INTEGRATION POINT</span> ── its CONTENT parses      │
+│                          under HTML rules again            │
+│                          (the &lt;desc&gt; node's own NAMESPACE  │
+│                           is still SVG)                    │
+│                                                            │
+│  which rules apply to the next token?  ►  the <span class="new">ADJUSTED     │
+│                                            CURRENT NODE</span>   │
+│                                                            │
+│  if this is element.innerHTML = str,                       │
+│  the ADJUSTED CURRENT NODE starts as the                   │
+│  <span class="new">FRAGMENT PARSING CONTEXT</span> element                       │
+└────────────────────────────────────────────────────────────┘
+   │
+   ▼
+tree of nodes, each stamped with a NAMESPACE for life
+   │
+   ▼
+you call svg.getBBox()  ◄── that's the SVG DOM. different layer entirely.</pre>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>Commonly confused pairs</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>The wrong statement</th><th>The correction</th></tr></thead>
+    <tbody>
+      <tr><td>"<code>&lt;desc&gt;</code> is in the HTML namespace because its content is HTML."</td><td>The <code>&lt;desc&gt;</code> <em>element</em> is in the SVG namespace (<code>desc.namespaceURI</code> = the SVG URI). Only its <em>content</em> parses with HTML rules. Namespace ≠ parsing mode.</td></tr>
+      <tr><td>"Foreign content means the elements aren't real / aren't in the DOM."</td><td>They are fully real DOM nodes. "Foreign" is about which vocabulary they belong to, not whether they exist.</td></tr>
+      <tr><td>"A breakout tag and an integration point both get you back to HTML, so they're the same."</td><td>An integration point is a <em>door</em> — the foreign elements stay on the stack, you're just parsing their children as HTML. A breakout tag is an <em>ejection</em> — the foreign elements are <strong>popped off the stack</strong> and the tag becomes their sibling.</td></tr>
+      <tr><td>"<code>&lt;mglyph&gt;</code> inside <code>&lt;mtext&gt;</code> parses as HTML, like everything else in <code>&lt;mtext&gt;</code>."</td><td><code>&lt;mglyph&gt;</code> and <code>&lt;malignmark&gt;</code> are the one exception — they stay MathML. That is precisely why they appear in DOMPurify bypasses.</td></tr>
+      <tr><td>"The fragment parsing context is just the element I assign <code>innerHTML</code> to; it doesn't change anything."</td><td>It seeds the insertion mode. A <code>&lt;textarea&gt;</code> context makes <code>&lt;img src=x onerror=1&gt;</code> inert text; a <code>&lt;div&gt;</code> context makes it a live element. Same string.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>Scenario-matching quiz</h2></div>
+  <details><summary><code>&lt;math&gt;&lt;mtext&gt;&lt;b&gt;x&lt;/b&gt;&lt;/mtext&gt;&lt;/math&gt;</code> — what namespace is <code>&lt;b&gt;</code>?</summary>
+    <p><strong>HTML.</strong> <code>&lt;mtext&gt;</code> is a MathML text integration point; its content parses as HTML, so <code>&lt;b&gt;</code> is an HTML element (verified: <code>b.namespaceURI</code> = the xhtml URI).</p></details>
+  <details><summary><code>&lt;math&gt;&lt;mtext&gt;&lt;mglyph&gt;&lt;style&gt;&lt;img src=x onerror=1&gt;&lt;/style&gt;</code> — is that <code>&lt;img&gt;</code> an element?</summary>
+    <p><strong>Yes.</strong> <code>&lt;mglyph&gt;</code> stays MathML, so <code>&lt;style&gt;</code> is a MathML element (not rawtext), so <code>&lt;img&gt;</code> is a real child element. This is the shape of a still-live 2026 bypass — Module 5.</p></details>
+  <details><summary><code>&lt;svg&gt;&lt;div&gt;hi&lt;/div&gt;&lt;/svg&gt;</code> — is <code>&lt;div&gt;</code> inside <code>&lt;svg&gt;</code>?</summary>
+    <p><strong>No.</strong> <code>&lt;div&gt;</code> is a breakout tag. The <code>&lt;svg&gt;</code> is popped off the stack; <code>&lt;div&gt;</code> becomes its sibling, in the HTML namespace.</p></details>
+  <details><summary>You do <code>document.createElementNS(SVG_NS, 'a')</code> then <code>document.body.appendChild(it)</code>. Was any parsing involved?</summary>
+    <p><strong>No.</strong> That is DOM mutation, not tree construction. No insertion mode, no foreign-content rules — you directly created an SVG-namespaced <code>&lt;a&gt;</code> and attached it. Sanitizers that only reason about parsed markup can miss nodes created this way.</p></details>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Back to</span><a href="tutorial.html">Module 1 tutorial</a></span>
+  <span class="next"><span class="dir">Uses this</span><a href="../../track2-mxss/05-mxss-namespace/tutorial.html">Module 5 · Namespace confusion &rarr;</a></span>
+</div>
+
+<div class="provenance"><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. All quiz answers verified against Chrome 148.</div>
+
+</div>
+</body>
+</html>
