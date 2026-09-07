@@ -1,0 +1,22 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Python (if any tooling scripts add a venv later)
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Runtime databases created by any lab code
+*.db
+*.sqlite
+*.sqlite3
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
