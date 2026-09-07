@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 6 — mXSS via Attribute Serialization</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 2 · Module 6 of 11 · The Mutation Catalogue</p>
+  <h1>Attribute Serialization<em>the four-character fix</em></h1>
+  <p class="thesis">Character references and quotes inside an attribute value used to break
+  out of that attribute on the next parse. This module shows the exact payloads, the
+  pre-2020 serializer that produced them, and the <b>four characters</b> the modern
+  serializer now escapes to close the whole class.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>The pre-2020 attribute serializer escaped only <code>&amp;</code> and <code>"</code>.
+    The modern one also escapes <span class="hi"><code>&lt;</code> and <code>&gt;</code></span>.
+    That two-character addition &mdash; verified in Chrome 148 &mdash; is why an entire
+    generation of "entity in an attribute" mXSS payloads are museum pieces.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../prerequisites/prerequisites.html">Prereq 7 · Character references</a>
+    <a class="tag" href="../../track1-engine/02-serializer-roundtrip/tutorial.html">Module 2 · The serializer</a>
+    <a class="tag" href="../../../bob_browser_tokenization/modules/11-attr-char-ref/tutorial.html">Tokenization · M11 (attr char-refs, imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Kofi labels a crate's contents in a single boxed field on the manifest:
+    <code>[ pineapples, ripe ]</code>. The rule for reading that field: everything between the
+    brackets is one description, commas and all.</p>
+    <p>A smuggler writes <code>[ pineapples ] [ rifles ]</code> in the field. If Kofi copies
+    it onto the next manifest <em>with the brackets he found</em>, the next officer reads two
+    fields &mdash; pineapples, and rifles. The save is a rule Kofi's clerk added in 2020:
+    <strong>when you copy a field, turn any stray bracket in it into the written word
+    "bracket"</strong>. Now the next officer reads one weird description &mdash; "pineapples
+    bracket bracket rifles bracket" &mdash; and files it as produce. The stray brackets
+    (<code>&lt;</code> and <code>&gt;</code>) became text.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li>Attacker submits <code>&lt;x title="&amp;lt;/title&amp;gt;&amp;lt;img src=x onerror=alert(1)&amp;gt;"&gt;</code>.</li>
+      <li>Parser: attribute values <em>do</em> decode entities, so the tree has
+      <code>x</code> with <code>title = "&lt;/title&gt;&lt;img src=x onerror=alert(1)&gt;"</code>
+      &mdash; a string. No element, no handler. <strong>The sanitizer approves it.</strong></li>
+      <li><strong>Pre-2020 serialize:</strong> <code>&amp;</code> and <code>"</code> escaped;
+      <code>&lt;</code>/<code>&gt;</code> left raw &rarr;
+      <code>title="&lt;/title&gt;&lt;img src=x onerror=alert(1)&gt;"</code>.</li>
+      <li>That string, re-emitted <em>unquoted</em> by an old IE serializer, or piped into an
+      XML/template consumer, or extracted from a <code>&lt;template&gt;</code> (Module 7):
+      the <code>&lt;img&gt;</code> is now a tag. <span class="stamp">XSS</span></li>
+      <li><strong>2026 serialize:</strong> <code>title="&amp;lt;/title&amp;gt;&amp;lt;img src=x onerror=alert(1)&amp;gt;"</code>.
+      RCDATA/RAWTEXT don't decode; a plain HTML re-parse keeps it a string. <strong>Dead.</strong></li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="verdict">
+    <div class="card danger"><h4>legacy serialize</h4>
+      <code>title="&lt;/title&gt;&lt;img src=x onerror=alert(1)&gt;"</code><br><br>
+      raw <code>&lt;</code> survives. Any non-HTML-aware re-emission &rarr; live tag.</div>
+    <div class="card safe"><h4>modern serialize</h4>
+      <code>title="&amp;lt;/title&amp;gt;&amp;lt;img&hellip;&amp;gt;"</code><br><br>
+      the <code>&lt;</code> is now the two characters <code>&amp;</code> <code>l</code><code>t</code><code>;</code>. Inert.</div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <pre><code><span class="c">// modern (engine/mxss-lab/lab.mjs)</span>
+escapeAttr(s) = s.replace(/&amp;/,'&amp;amp;').replace(/\u00a0/,'&amp;nbsp;')
+                 .replace(/"/,'&amp;quot;')<span class="g">.replace(/&lt;/,'&amp;lt;').replace(/&gt;/,'&amp;gt;')</span>;
+
+<span class="c">// legacy — the two green calls above simply weren't there</span>
+escapeAttrLegacy(s) = s.replace(/&amp;/,'&amp;amp;').replace(/\u00a0/,'&amp;nbsp;').replace(/"/,'&amp;quot;');</code></pre>
+  <p><code>bothSerializers(payload)</code> parses once, serialises both ways, and re-parses
+  each with scripting on. Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant"><h4>Can't do yet</h4><ul>
+      <li>Fire this against a plain modern HTML re-parse &mdash; the four-char escape closed it</li>
+      <li>Exploit a quoted attribute's <code>&lt;</code>/<code>&gt;</code> directly &mdash; the closing quote ends the value first, in every browser</li>
+    </ul></div>
+    <div class="can"><h4>Can do</h4><ul>
+      <li>Show the legacy vs modern serialized strings differ by exactly two characters</li>
+      <li>Explain the historical co-factor (unquoted IE serialization / non-HTML consumer) each vector needed</li>
+      <li>Connect this to Module 7, where the <code>&lt;template&gt;</code> extraction <em>is</em> that non-HTML-aware re-emission</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track2-mxss\06-mxss-attributes
+node test\demo.mjs</code></pre>
+    <span class="lab">Expected output</span>
+    <pre><code>MODULE 6 — mXSS via Attribute Serialization
+
+  PASS  entity-encoded &lt;/title&gt; in a title attr: source tree is SAFE ...
+  PASS  entity-encoded &lt;/title&gt; in a title attr: MODERN serializer keeps it safe ...
+  PASS  ... (3 vectors × 2)
+  PASS  the LEGACY serializer leaves a raw &lt; inside the attribute; the MODERN one does not
+  PASS  the class is CLOSED for HTML re-parse: no VECTOR fires with the modern serializer
+  PASS  the difference is EXACTLY &lt; and &gt; in attribute values
+  PASS  a plain quote does NOT break out ...
+
+  10 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>"MODERN serializer leaked"</strong> on some vector &mdash; check your
+    <code>lab.mjs</code>'s <code>escapeAttr</code> has the two
+    <code>.replace(/&lt;/…).replace(/&gt;/…)</code> calls. Without them you have the 2019
+    serializer.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>If quoted attribute values are safe from <code>&lt;</code>/<code>&gt;</code>
+    break-out anyway (the quote ends the value), why did browsers bother adding the escape?</summary>
+    <p>Because the serialized string doesn't only get re-parsed as HTML. It gets: assigned to
+    another element's <code>innerHTML</code> (fine), but also <code>document.write()</code>n,
+    concatenated into a larger template, fed to an XML parser, stored and later rendered
+    server-side, or &mdash; Module 7 &mdash; extracted from a <code>&lt;template&gt;</code>'s
+    inert fragment and inserted live. In several of those, the value is re-tokenized in a
+    state where the quote context is lost. Escaping <code>&lt;</code>/<code>&gt;</code> at
+    serialization time makes the string safe <em>regardless of who consumes it next</em>,
+    which is the only property worth having.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: What was the IE backtick vector?</div>
+    <div class="a">A: Internet Explorer treated <code>`</code> as a quote character in unquoted
+    attribute values. <code>&lt;img src=`xx`onerror=alert(1)&gt;</code> parsed as
+    <code>src="xx"</code> + <code>onerror="alert(1)"</code> in IE, and sanitizers that only
+    knew about <code>"</code> and <code>'</code> missed it. No current browser does this;
+    it's in <code>src/attributes.mjs</code> as <code>IE_BACKTICK_HISTORY</code>, documented
+    for the timeline, not run.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Do attribute values really decode entities during parsing?</div>
+    <div class="a">A: Yes &mdash; the tokenizer's "attribute value" state consumes character
+    references. That's why <code>href="?a=1&amp;amp;b=2"</code> works. It's also why
+    <code>&amp;lt;</code> in a submitted attribute becomes a real <code>&lt;</code>
+    <em>character</em> in the parsed tree &mdash; the thing this module is about.</div></div>
+
+    <div class="qa-item"><div class="q">Q: So is Module 6 just history?</div>
+    <div class="a">A: The <em>plain HTML re-parse</em> version is. The <em>mechanism</em> &mdash;
+    "a value that's data in the tree becomes markup when re-emitted into the wrong context"
+    &mdash; is exactly Module 7's <code>&lt;template&gt;</code> extraction and Module 9's
+    <code>document.write</code> sink. This module is where you learn to see it.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p><a href="../07-mxss-template/tutorial.html">Module 7</a>: <code>&lt;template&gt;</code>.
+  Its content lives in a separate, inert <code>DocumentFragment</code> that a sanitizer often
+  forgets to walk &mdash; and when the app later extracts that fragment into the live DOM,
+  everything the sanitizer skipped runs.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../05-mxss-namespace/tutorial.html">Module 5 · Namespace</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../07-mxss-template/tutorial.html">Module 7 · Template reparenting &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/attributes.mjs</code>. Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.
+  Citations: <a href="../../REFERENCES.md">REFERENCES.md</a> [R3], [R7].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. The modern/legacy string
+  difference and the "closed for HTML re-parse" result verified against Chrome 148.</p>
+</div>
+
+</div>
+</body>
+</html>
