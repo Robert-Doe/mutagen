@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mutation XSS, Built From Scratch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · a code-first course · continues bob_browser_tokenization &amp; bob_foster_parenting</p>
+  <h1>Mutation XSS<em>Built From Scratch</em></h1>
+  <p class="thesis">You build a small HTML engine, a serializer, and a sanitizer &mdash; then
+  break your own sanitizer one mutation class at a time, and fix it. <b>Every claim on every
+  page was produced by running real code, then checked against a real browser.</b></p>
+
+  <div class="therule">
+    <span class="lbl">The one fact this whole course exists to prove</span>
+    <p>HTML parsing is <span class="hi">not idempotent</span>.<br><br>
+    parse( serialize( parse(x) ) )  &nbsp;&ne;&nbsp;  parse(x)<br><br>
+    A sanitizer computes <b>clean = serialize(sanitize(parse(dirty)))</b>. The browser then
+    runs <b>parse(clean)</b> at innerHTML. If that last parse builds a tree the sanitizer
+    never saw &mdash; and it runs script &mdash; that is mutation XSS.</p>
+  </div>
+</header>
+
+<section class="mod" id="sekondi">
+  <div class="modhead"><span class="modnum">☞</span><h2>Meet Kofi</h2></div>
+  <div class="sekondi">
+    <p>Every module is anchored to one person: <strong>Kofi</strong>, sixteen, who lives a
+    few streets up from the fishing harbour in <strong>Sekondi</strong>, on Ghana's western
+    coast. On Saturdays Kofi helps at the <strong>customs shed</strong> at the port &mdash;
+    opening crates, checking the contents against a list of what's allowed in, nailing them
+    shut again, sending them on.</p>
+    <p>That is the whole of mutation XSS in one picture. A <strong>sanitizer</strong> is the
+    customs officer with the allowed-list. <strong>Parsing</strong> is opening a crate to see
+    what is really inside. <strong>Serialization</strong> is nailing it shut again.
+    <strong>Mutation XSS</strong> is the next officer down the dock opening that resealed
+    crate and finding something the first officer would never have passed &mdash; not because
+    anyone tampered with it in transit, but because <em>the rules for packing a crate and the
+    rules for unpacking one do not perfectly mirror each other</em>. Hold onto Kofi. He is on
+    every page.</p>
+  </div>
+</section>
+
+<section class="mod" id="stitch">
+  <div class="modhead"><span class="modnum">00</span><h2>How this course is stitched together</h2></div>
+  <p>Three finished courses sit next to this one. This course stands on them instead of
+  repeating them. Where a page was <strong>imported</strong> from one of those courses it
+  carries a provenance note at the bottom saying where it came from and when it was last
+  re-verified here. Pages marked <strong>new</strong> were written for this course.</p>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Sibling course</th><th>What this course reuses from it</th></tr></thead>
+    <tbody>
+      <tr><td><code>bob_browser_tokenization</code></td><td>the character-by-character HTML tokenizer; the mXSS <em>mechanism</em> (module A3)</td></tr>
+      <tr><td><code>bob_foster_parenting</code></td><td>the tree-construction engine; the table-shaped slice of mXSS (Track 2)</td></tr>
+      <tr><td><code>bob_CSP_trusted_types</code></td><td>the defence layers <em>above</em> sanitizing &mdash; we hand off to it at the end</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod" id="path">
+  <div class="modhead"><span class="modnum">01</span><h2>The reading path</h2></div>
+  <p>Follow this top to bottom. Each page links forward to the next.</p>
+  <ol class="path">
+    <li><a href="prerequisites/prerequisites.html"><strong>Prerequisites</strong></a>
+      <span class="new-tag">new</span><br>Ten ideas every module assumes. Two written in full here
+      (<a href="prerequisites/prereq_namespaces.html">namespaces</a>,
+      <a href="prerequisites/prereq_scripting-flag.html">the scripting flag</a>); the rest link into the sibling courses.</li>
+
+    <li><a href="track1-engine/01-foreign-content-fragment/tutorial.html"><strong>Track&nbsp;1 · Module&nbsp;1 &mdash; Foreign Content &amp; the Fragment Parser</strong></a>
+      <span class="new-tag">new</span><br>How the tree builder switches into and out of SVG / MathML, and what <code>element.innerHTML = "&hellip;"</code> actually runs.</li>
+
+    <li><a href="track1-engine/02-serializer-roundtrip/tutorial.html"><strong>Track&nbsp;1 · Module&nbsp;2 &mdash; The Serializer, and Why It Won't Round-Trip</strong></a>
+      <span class="new-tag">new</span><br>The <code>innerHTML</code> getter algorithm, and the markup it invents.</li>
+
+    <li><a href="track2-mxss/03-mxss-rcdata/tutorial.html"><strong>Track&nbsp;2 · Module&nbsp;3 &mdash; mXSS via RCDATA / Rawtext Wrapper Removal</strong></a>
+      <span class="new-tag">new</span><br><code>&lt;title&gt;</code>, <code>&lt;textarea&gt;</code>, <code>&lt;style&gt;</code>, <code>&lt;xmp&gt;</code>, <code>&lt;noembed&gt;</code>: remove the lid, the contents go live. (Vocabulary web: mXSS vs DOM XSS vs stored vs clobbering.)</li>
+
+    <li><a href="track2-mxss/04-mxss-noscript/tutorial.html"><strong>Track&nbsp;2 · Module&nbsp;4 &mdash; mXSS via the Scripting Flag (<code>&lt;noscript&gt;</code>)</strong></a>
+      <span class="new-tag">new</span><br>The Google Search 2019 bug, reproduced &mdash; and re-tested against the browser you actually have.</li>
+
+    <li><a href="track2-mxss/05-mxss-namespace/tutorial.html"><strong>Track&nbsp;2 · Module&nbsp;5 &mdash; mXSS via Namespace Confusion (SVG / MathML)</strong></a>
+      <span class="new-tag">new</span><br>The famous DOMPurify bypass family: <code>&lt;svg&gt;&lt;style&gt;</code>, <code>&lt;math&gt;&lt;mtext&gt;</code>, <code>&lt;mglyph&gt;</code>, <code>&lt;form&gt;</code> double-nesting.</li>
+
+    <li><a href="track2-mxss/06-mxss-attributes/tutorial.html"><strong>Track&nbsp;2 · Module&nbsp;6 &mdash; mXSS via Attribute Serialization</strong></a>
+      <span class="new-tag">new</span><br>Entities and quotes that break out of an attribute on the next parse; the IE backtick, as history.</li>
+
+    <li><a href="track2-mxss/07-mxss-template/tutorial.html"><strong>Track&nbsp;2 · Module&nbsp;7 &mdash; mXSS via <code>&lt;template&gt;</code> Reparenting</strong></a>
+      <span class="new-tag">new</span><br>Moving nodes across the inert-fragment boundary re-animates a payload.</li>
+
+    <li><a href="track2-mxss/08-hardened-sanitizer/tutorial.html"><strong>Track&nbsp;2 · Module&nbsp;8 &mdash; The Hardened Sanitizer (and how DOMPurify actually does it)</strong></a>
+      <span class="new-tag">new</span><br>One sanitizer that closes Modules 3&ndash;7, read line-by-line against real DOMPurify source.</li>
+
+    <li><a href="track3-frontier/09-parser-differentials/tutorial.html"><strong>Track&nbsp;3 · Module&nbsp;9 &mdash; Parser Differentials: the Sink Zoo</strong></a>
+      <span class="new-tag">new</span><br>Seven HTML sinks, one string, seven trees.</li>
+
+    <li><a href="track3-frontier/10-reading-disclosures/tutorial.html"><strong>Track&nbsp;3 · Module&nbsp;10 &mdash; Reading Disclosures Like a Researcher</strong></a>
+      <span class="new-tag">new</span><br>A repeatable dissection method on real DOMPurify bypass write-ups.</li>
+
+    <li><a href="track3-frontier/11-native-sanitizer-api/tutorial.html"><strong>Track&nbsp;3 · Module&nbsp;11 &mdash; The Native Sanitizer API: Does the Platform Fix Hold?</strong></a>
+      <span class="new-tag">new</span><br><code>setHTML()</code> and why it is mutation-safe by construction.</li>
+
+    <li><a href="lessons/01_history-of-mxss/01_explainer.html"><strong>Lesson cluster &mdash; A History of Mutation XSS</strong></a>
+      <span class="new-tag">new</span><br>Heiderich (CCS 2013) &rarr; the DOMPurify bypass chain &rarr; the Sanitizer API.</li>
+  </ol>
+</section>
+
+<section class="mod" id="stops">
+  <div class="modhead"><span class="modnum">02</span><h2>Recommended stopping points</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Your goal</th><th>Stop after</th></tr></thead>
+    <tbody>
+      <tr><td>Understand the mechanism and the history</td><td>Module 5 + the history lesson</td></tr>
+      <tr><td>Understand the one famous bypass family (DOMPurify / SVG)</td><td>Module 5</td></tr>
+      <tr><td>Configure or audit a sanitizer at work</td><td>Module 8</td></tr>
+      <tr><td>The whole picture, production defences included</td><td>Module 11, then the CSP &amp; Trusted Types course</td></tr>
+      <tr><td>PhD-level command &mdash; reproduce any disclosure, defend any design choice</td><td>Everything, deep dives and lesson cluster included</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod" id="run">
+  <div class="modhead"><span class="modnum">03</span><h2>Running the code</h2></div>
+  <p>Everything runs with <strong>Node.js</strong> (v20+) and a browser. No build step, no
+  framework, no dependencies. Each module's <code>06 &mdash; Run It</code> section gives the
+  exact PowerShell commands and the exact expected output. The from-scratch engine every
+  module imports lives at <code>engine/mxss-lab/lab.mjs</code>.</p>
+  <pre><code>node --version   <span class="c"># expect v20 or higher</span>
+cd track1-engine\01-foreign-content-fragment ; node test\demo.mjs</code></pre>
+</section>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Plan and status: <a href="ROADMAP.md">ROADMAP.md</a>. Every term: <a href="GLOSSARY.md">GLOSSARY.md</a>.
+  Bibliography: <a href="REFERENCES.md">REFERENCES.md</a>. What was copied from where, and when:
+  <a href="PROVENANCE.md">PROVENANCE.md</a>.</p>
+  <p><strong>Provenance:</strong> this page is <strong>new</strong> for bob_mXSS. The reused
+  engine under <code>engine/foster-parser/</code> was copied from the Foster Parenting course
+  on 2026-09-07 and its test suites re-run here (all passing).</p>
+</div>
+
+</div>
+</body>
+</html>
