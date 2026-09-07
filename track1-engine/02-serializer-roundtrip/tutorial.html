@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 2 — The Serializer, and Why It Won't Round-Trip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 1 · Module 2 of 11 · The Engine</p>
+  <h1>The Serializer<em>and why it won't round-trip</em></h1>
+  <p class="thesis">A sanitizer never hands the browser a tree. It hands it a <b>string</b>,
+  produced by the <code>innerHTML</code> getter. This module builds that algorithm and shows
+  the first case where <b>parse(serialize(parse(x)))</b> comes back as something
+  <b>parse(x)</b> never was.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>Serialization is <span class="hi">not the inverse of parsing</span>. It normalises some
+    things, escapes others, and &mdash; for <code>&lt;style&gt;</code>,
+    <code>&lt;script&gt;</code>, <code>&lt;xmp&gt;</code>, <code>&lt;noscript&gt;</code> &mdash;
+    escapes <em>nothing</em>. So the string you check is not always the string the browser
+    parses.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../prerequisites/prerequisites.html">Prereq 4 · Parsing vs serialization</a>
+    <a class="tag" href="../../prerequisites/prerequisites.html">Prereq 9 · Idempotency &amp; fixed points</a>
+    <a class="tag" href="../01-foreign-content-fragment/tutorial.html">Module 1 · Foreign content</a>
+    <a class="tag" href="../../../bob_foster_parenting/track2-mxss/04_idempotent_serialization/tutorial.html">Foster Parenting · T2-04 (imported context)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Kofi opens a crate, checks everything, and writes a <em>fresh manifest</em> before
+    nailing it shut for the next leg. The rules for writing a manifest are not the same as the
+    rules for reading one. When he reads, a comma in a product name is just a comma. When he
+    writes, he is told to put quotes around any field with a comma in it &mdash; so the field
+    <code>knives, 6 inch</code> gets written as <code>"knives, 6 inch"</code>. Read that back
+    and you get the same thing. Fine.</p>
+    <p>But there is a shortcut clause. For bulk cargo &mdash; sand, gravel, scrap &mdash; Kofi
+    is told <em>not</em> to bother quoting anything, just copy the weight ticket through
+    verbatim. Now suppose someone slips a weight ticket that reads
+    <code>gravel 40kg&rdquo; contraband 5kg &ldquo;</code>. Kofi copies it through unquoted,
+    because that's the rule for gravel. The <em>next</em> officer reads it and sees two line
+    items. The manifest changed meaning between writing and reading &mdash; not because
+    anyone lied, but because the write rule and the read rule don't line up for bulk cargo.
+    <code>&lt;style&gt;</code> and <code>&lt;xmp&gt;</code> are the bulk cargo.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <p>The <code>innerHTML</code> getter (WHATWG §13.3, "serialising HTML fragments") walks the
+    node's children in order:</p>
+    <ol>
+      <li><strong>Text node</strong> &rarr; if the parent is <code>&lt;style&gt;</code>,
+      <code>&lt;script&gt;</code>, <code>&lt;xmp&gt;</code>, <code>&lt;iframe&gt;</code>,
+      <code>&lt;noembed&gt;</code>, <code>&lt;noframes&gt;</code>, <code>&lt;noscript&gt;</code>,
+      <code>&lt;plaintext&gt;</code>: emit the data <strong>verbatim</strong>. Otherwise:
+      replace <code>&amp;</code>&rarr;<code>&amp;amp;</code>, U+00A0&rarr;<code>&amp;nbsp;</code>,
+      <code>&lt;</code>&rarr;<code>&amp;lt;</code>, <code>&gt;</code>&rarr;<code>&amp;gt;</code>.</li>
+      <li><strong>Element</strong> &rarr; <code>&lt;name</code>, then each attribute as
+      <code>&nbsp;name="value"</code> where the value has <code>&amp;</code>, U+00A0,
+      <code>"</code> escaped &mdash; and, in browsers since ~2020, <code>&lt;</code> and
+      <code>&gt;</code> too. Then <code>&gt;</code>. Then serialise the children. Then
+      <code>&lt;/name&gt;</code> &mdash; unless the element is <em>void</em>
+      (<code>&lt;img&gt; &lt;br&gt; &lt;input&gt;</code>&hellip;), which gets no close tag and
+      no children.</li>
+      <li><strong>Comment</strong> &rarr; <code>&lt;!--data--&gt;</code>. (The data is
+      <em>not</em> escaped &mdash; another place things can go wrong.)</li>
+    </ol>
+    <p>The spec's own note on this section: the output <strong>"might not round-trip"</strong>
+    &mdash; parsing it can yield a different tree. It says so in plain text. [R3]</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>text node "&lt;img&gt;" under &lt;p&gt;</h4>
+      <pre class="tree">p
+└─ #text "&lt;img&gt;"
+serialize ►  <span class="new">&lt;p&gt;&amp;lt;img&amp;gt;&lt;/p&gt;</span>   safe</pre>
+    </div>
+    <div class="railbox">
+      <h4>text node "&lt;img&gt;" under &lt;style&gt;</h4>
+      <pre class="tree">style
+└─ #text "&lt;img&gt;"
+serialize ►  <span class="new">&lt;style&gt;&lt;img&gt;&lt;/style&gt;</span>   verbatim</pre>
+    </div>
+  </div>
+  <p>Identical node, identical data. The parent's name decides whether the <code>&lt;</code>
+  survives serialization as <code>&amp;lt;</code> or as a live <code>&lt;</code>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p><code>engine/mxss-lab/lab.mjs</code>, the whole serializer that matters:</p>
+  <pre><code>const NO_ESCAPE_TEXT = new Set(['style','script','xmp','iframe',
+  'noembed','noframes','noscript','plaintext']);
+
+function serialize(node) {
+  let out = '';
+  for (const child of kidsArray(node)) {
+    if (child.type === 'text') {
+      const parent = node.name?.toLowerCase();
+      <span class="y">out += NO_ESCAPE_TEXT.has(parent) ? child.data : escapeText(child.data);</span>
+    } else if (child.type === 'comment') {
+      out += `&lt;!--${child.data}--&gt;`;
+    } else {
+      out += serializeElement(child);   <span class="c">// &lt;name attr="..."&gt; children &lt;/name&gt;</span>
+    }
+  }
+  return out;
+}</code></pre>
+  <p>And the round-trip harness &mdash; <em>the</em> tool of this course:</p>
+  <pre><code>function roundTrip(html, {contextTag='body', scripting=false, max=5}) {
+  let cur = html; const steps = [html];
+  for (let k = 0; k &lt; max; k++) {
+    const next = serialize(parseFragment(cur, contextTag, {scripting}));
+    steps.push(next);
+    <span class="y">if (next === cur) return {steps, stable:true, iterations:k+1};</span>
+    cur = next;
+  }
+  return {steps, stable:false, iterations:max};   <span class="c">// never settled — a red flag</span>
+}</code></pre>
+  <p>Full rationale: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Show a payload going from <em>inert</em> to <em>executing</em> across a round trip &mdash; Module 3</li>
+        <li>Explain why a sanitizer that runs the round-trip loop is still not enough &mdash; Modules 4&ndash;7</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Predict the serialized string for any parsed tree</li>
+        <li>Tell whether parse&sbquo;serialize is idempotent for a given input, and how many rounds it takes to settle</li>
+        <li>Name the exact rule (raw text emission, attribute escaping, structural normalisation) behind any difference</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track1-engine\02-serializer-roundtrip
+node test\demo.mjs</code></pre>
+    <span class="lab">Expected output (captured from a real run)</span>
+    <pre><code>MODULE 2 — The Serializer, and Why It Won't Round-Trip
+
+  PASS  text: &lt; &gt; &amp; are escaped
+  PASS  attribute value: &lt; &gt; &amp; " are escaped (modern serializer)
+  PASS  &lt;style&gt; content is emitted RAW — no escaping
+  PASS  &lt;xmp&gt; content is emitted RAW
+  PASS  void elements get no close tag
+  PASS  structural normalization: an unclosed &lt;b&gt; is closed on serialize
+  PASS  serialize(parse(x)) != x for a&lt;b&gt;c  (needs 1 round to stabilise)
+  PASS  the &lt;svg&gt;&lt;style&gt; case needs TWO rounds to reach a fixed point
+  PASS  modern vs legacy serializer differ exactly on &lt; &gt; in attributes
+
+  9 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>"does not provide an export named 'escapeAttrLegacy'"</strong> &mdash; your
+    <code>engine/mxss-lab/lab.mjs</code> is an older copy; re-pull it. The export was added
+    for Module 6's before/after comparison.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The round-trip harness returns <code>stable: false</code> for some input &mdash;
+    it re-serialised 5 times and never got the same string twice. Is that possible, and what
+    would it mean for a sanitizer?</summary>
+    <p>It is possible in principle (two shapes that each serialise into the other), and it is
+    a <strong>catastrophic</strong> signal for a sanitizer. A sanitizer that runs
+    "sanitise &rarr; serialise &rarr; re-parse &rarr; sanitise again, until stable" (Module 8,
+    and DOMPurify's real strategy) <em>relies</em> on a fixed point existing. If none exists,
+    the loop either runs forever or bails after N tries and ships a string it never fully
+    checked. In practice browsers have removed the constructs that caused true non-termination
+    (the 2024 <code>&lt;select&gt;</code> parsing change, covered in the Foster Parenting
+    course, was partly for this). But "always cap the loop and treat a non-fixed-point as a
+    hard reject" is exactly why Module 8's sanitiser has a <code>max</code> and throws.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: If the spec knows serialization doesn't round-trip, why not fix it?</div>
+    <div class="a">A: A truly round-trip-safe serializer would have to escape inside
+    <code>&lt;style&gt;</code>/<code>&lt;script&gt;</code> &mdash; but then the CSS/JS it
+    contains would be corrupted (<code>a &gt; b</code> selectors, <code>x &lt; y</code>
+    comparisons). Raw emission is the only thing that keeps those elements usable. The gap is
+    load-bearing, not a bug.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Is <code>outerHTML</code> the same algorithm?</div>
+    <div class="a">A: Almost &mdash; <code>outerHTML</code> serialises the element itself plus
+    its children; <code>innerHTML</code> only the children. <code>XMLSerializer</code> is a
+    <em>different</em> algorithm again (XML rules: always self-close, namespaces explicit).
+    Module 9 lines all seven up.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Why does <code>a&lt;b&gt;c</code> come back as <code>a&lt;b&gt;c&lt;/b&gt;</code> &mdash; nothing dangerous happened?</div>
+    <div class="a">A: Nothing dangerous <em>there</em>. It is the smallest proof that
+    <code>serialize(parse(x)) &ne; x</code> even for boring input, which is the premise every
+    later module builds on. If the identity held, mutation XSS could not exist.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Does the round-trip loop always terminate?</div>
+    <div class="a">A: For the constructs this course covers, in current browsers, yes &mdash;
+    usually in 1&ndash;2 rounds. The harness still caps at <code>max</code> and reports
+    <code>stable: false</code> rather than looping, because "assume it terminates" is not a
+    property you want a security control to depend on.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>You now have both halves of the round trip: Module 1's parser and this module's
+  serializer. <a href="../../track2-mxss/03-mxss-rcdata/tutorial.html">Module 3</a> puts them
+  together for the first real attack &mdash; a sanitizer that removes a <code>&lt;title&gt;</code>
+  or <code>&lt;xmp&gt;</code> it doesn't like, and in doing so turns its inert text content
+  into a live <code>onerror</code> handler.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../01-foreign-content-fragment/tutorial.html">Module 1 · Foreign content</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../../track2-mxss/03-mxss-rcdata/tutorial.html">Module 3 · RCDATA wrapper removal &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/serializer.mjs</code> + <code>engine/mxss-lab/lab.mjs</code>. Rationale:
+  <a href="DECISIONS.md">DECISIONS.md</a>. Citations: <a href="../../REFERENCES.md">REFERENCES.md</a> [R3].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. All 9 assertions captured from
+  Chrome 148 first (<code>DOMParser</code> + live <code>innerHTML</code>), then verified
+  against our engine.</p>
+</div>
+
+</div>
+</body>
+</html>
