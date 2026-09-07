@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 8 — The Hardened Sanitizer (and how DOMPurify actually does it)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 2 · Module 8 of 11 · Making It Right</p>
+  <h1>The Hardened Sanitizer<em>one sanitizer, all five classes</em></h1>
+  <p class="thesis">Four ideas &mdash; loop to a fixed point, enforce the HTML namespace,
+  unwrap/forbid the mutating elements, scrub attributes on every surviving node &mdash; and
+  every vector from Modules 3&ndash;7 is closed, with benign HTML preserved. Then we read
+  those four ideas in the real DOMPurify source.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><code>hardenedSanitizer</code> takes all <span class="hi">12 attack payloads</span> from
+    this course and produces output that is inert after the browser re-parses it, while
+    <code>&lt;p&gt;hello &lt;b&gt;world&lt;/b&gt; &lt;a href="/x"&gt;link&lt;/a&gt;&lt;/p&gt;</code>
+    comes through untouched. 20/20 tests.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../03-mxss-rcdata/tutorial.html">Modules 3&ndash;7 (all the vectors)</a>
+    <a class="tag" href="../../prerequisites/prerequisites.html">Prereq 9 · Idempotency</a>
+    <a class="tag" href="../../../bob_foster_parenting/track2-mxss/04_idempotent_serialization/tutorial.html">Foster Parenting · T2-04 (the loop, imported)</a>
+    <a class="tag" href="../../../bob_CSP_trusted_types/track2-trusted-types/24_sanitizer_capstone/tutorial.html">CSP&amp;TT · sanitizer capstone (imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Kofi's supervisor rewrites the whole procedure after a bad year. <strong>One:</strong>
+    after you seal a crate, <em>unseal it and re-check it</em> &mdash; and repeat until a
+    re-check finds nothing new. If it never stabilises, refuse the crate entirely.
+    <strong>Two:</strong> every item is checked against the General Goods rulebook, no matter
+    which hall it arrived in &mdash; a co-op stamp buys you nothing. <strong>Three:</strong>
+    certain container types &mdash; sealed drums, sample crates, diplomatic pouches &mdash;
+    are just <em>not accepted</em>; tip the contents out and check those, or turn the lot
+    away. <strong>Four:</strong> the item checklist runs on <em>every</em> item that ends up
+    on the table, including ones that fell out of a container you removed.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li><strong>Pass:</strong> parse (scripting off) &rarr; walk a snapshot of every child
+      list &rarr; for each element:
+        <ul>
+          <li>on the forbidden list (<code>style script xmp noscript noembed noframes iframe
+          title textarea template mglyph malignmark annotation-xml</code>) &rarr; drop it
+          <em>and its subtree</em>;</li>
+          <li>not in the HTML namespace &rarr; drop it, keep cleaned children;</li>
+          <li>not on the allow-list &rarr; unwrap (keep cleaned children);</li>
+          <li>allowed &rarr; keep, but filter attributes: no <code>on*</code>, no
+          <code>style=</code>, allow-list only, no <code>javascript:</code>/<code>data:</code>
+          URLs.</li>
+        </ul>
+      &rarr; serialize.</li>
+      <li><strong>Loop:</strong> feed that string back through the pass. If it equals the
+      previous output &mdash; a fixed point &mdash; ship it. If not, go again.</li>
+      <li>After <code>max</code> passes with no fixed point: <strong>throw</strong>. A string
+      that won't stabilise is a string you cannot vouch for.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Idea</th><th>Closes</th><th>DOMPurify equivalent</th></tr></thead>
+    <tbody>
+      <tr><td>loop to a fixed point</td><td>M2 non-idempotency; M5 <code>svg/p</code></td><td>historically the <code>do…while(dirty)</code>; today a stable serialisation + mutation re-check</td></tr>
+      <tr><td>enforce HTML namespace</td><td>M5 <code>form</code>, <code>mglyph</code>, foreign elements</td><td><code>_checkValidNamespace</code></td></tr>
+      <tr><td>forbid + unwrap mutating elements</td><td>M3 rawtext; M4 <code>noscript</code>; M7 <code>template</code></td><td><code>&lt;template&gt;</code> not in <code>ALLOWED_TAGS</code>; <code>_forceRemove</code>; <code>FORBID_CONTENTS</code></td></tr>
+      <tr><td>scrub attrs on every surviving node</td><td>M5 promoted <code>&lt;img&gt;</code>; M6</td><td><code>_sanitizeAttributes</code> per node, run after promotion</td></tr>
+      <tr><td>normalise the <code>&lt;image&gt;</code> alias</td><td>M5 <code>&lt;image&gt;</code></td><td>tag-name canonicalisation</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The loop, in <code>engine/mxss-lab/sanitizers.mjs</code>:</p>
+  <pre><code>export function hardenedSanitizer(html, opts) {
+  let cur = String(html);
+  for (let i = 0; i &lt; (opts.max ?? 6); i++) {
+    const next = onePass(cur, opts);
+    <span class="y">if (next === cur) return next;</span>          <span class="c">// fixed point — safe to ship</span>
+    cur = next;
+  }
+  <span class="r">throw new Error('no fixed point after ' + max + ' passes — rejecting input');</span>
+}</code></pre>
+  <p>One pass, the load-bearing checks:</p>
+  <pre><code>if (FORBIDDEN.has(name)) continue;                 <span class="g">// drop subtree</span>
+if (child.ns !== HTML) continue;                   <span class="g">// namespace gate</span>
+if (!allow.elements.has(name)) { hoistCleanChildren(); continue; }   <span class="g">// unwrap</span>
+child.attrs = child.attrs.filter(scrub);           <span class="g">// per-node attribute allow-list</span></code></pre>
+  <p>Line-by-line mapping to DOMPurify, and why the loop is kept explicit even though modern
+  DOMPurify folds it in: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant"><h4>Can't do yet</h4><ul>
+      <li>Guarantee safety against a future browser parser change &mdash; a new mutation could need a new forbidden entry</li>
+      <li>Stop the payload if a bypass <em>does</em> land &mdash; sanitising is the last line, not the only one (Module 11, then CSP)</li>
+      <li>Handle every DOMPurify config option &mdash; this is a teaching sanitizer, ~90 lines</li>
+    </ul></div>
+    <div class="can"><h4>Can do</h4><ul>
+      <li>Close all 12 course vectors, verified, while preserving benign HTML</li>
+      <li>Reject (not silently ship) any input that won't reach a fixed point</li>
+      <li>Explain every line by pointing at the DOMPurify mechanism it mirrors and the module it defends</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track2-mxss\08-hardened-sanitizer
+node test\demo.mjs</code></pre>
+    <span class="lab">Expected output (tail)</span>
+    <pre><code>  PASS  CLOSED: M7 nested template
+  PASS  PRESERVED: &lt;p&gt;hello &lt;b&gt;world&lt;/b&gt; &lt;a href="/x"&gt;link&lt;
+  PASS  the round-trip loop reaches a fixed point (does not throw)
+  PASS  one pass is NOT always enough — a second pass changes some outputs
+  PASS  forbidden elements are dropped WITH their subtree, not unwrapped
+  PASS  namespace: no SVG/MathML element survives
+
+  20 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>"no fixed point after 6 passes — rejecting input"</strong> on a payload you
+    expected to clean &mdash; that's the loop working. Either the input genuinely doesn't
+    stabilise (reject it) or raise <code>max</code> if you have a legitimate reason to expect
+    &gt;6 rounds (you almost never do).</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The hardened sanitizer <em>forbids</em> <code>&lt;style&gt;</code> outright. But
+    lots of apps &mdash; email clients, CMS &mdash; legitimately need scoped
+    <code>&lt;style&gt;</code>. How would you allow it without re-opening Modules 3 and 5?</summary>
+    <p>Keep the element but treat its text content as a <em>separate sanitisation problem</em>
+    with its own rules: parse the CSS, drop <code>@import</code>, <code>expression()</code>,
+    <code>url(javascript:…)</code>, <code>-moz-binding</code>, and &mdash; the mXSS-specific
+    part &mdash; verify the serialised CSS contains no <code>&lt;/style</code> substring
+    (case-insensitively, entity-normalised) that could close the element early on reparse. If
+    it does, re-encode or reject. This is exactly what DOMPurify's <code>SAFE_FOR_XML</code>
+    and its dedicated <code>_isValidAttribute</code>-for-style path do, and why enabling
+    <code>&lt;style&gt;</code> in DOMPurify pulls in a CSS parser. The general principle: if
+    you must allow a mutating element, you take on the job of proving <em>its</em>
+    serialisation round-trips, per element, forever.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: Does real DOMPurify actually run a loop?</div>
+    <div class="a">A: Early versions had an explicit <code>do { ... } while (dirty)</code>.
+    Current versions removed it because they rebuild the DOM from a stable serialisation and
+    re-check for nodes mutated/clobbered during the walk &mdash; which gives the same fixed-point
+    guarantee more cheaply. We keep the explicit loop in the teaching version because it
+    <em>states the property</em>: "the string I ship must survive being re-parsed as itself."</div></div>
+
+    <div class="qa-item"><div class="q">Q: Why forbid <code>&lt;template&gt;</code> and <code>&lt;noscript&gt;</code> rather than handle them?</div>
+    <div class="a">A: Because "handle the special element correctly, forever, across every
+    future browser" is a losing maintenance bet. Removing the element removes the special
+    parsing context that made it exploitable. You only take on "handle it" for elements an
+    app truly can't live without.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Is this enough? Can I ship this?</div>
+    <div class="a">A: This is a <em>teaching</em> sanitizer &mdash; ~90 lines, no CSS parser,
+    no URL policy engine, no config surface. Ship DOMPurify or the native Sanitizer API. Use
+    this to <em>understand</em> what those are doing and to audit a config. And read Module 11:
+    even a perfect sanitizer is one layer.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Track 2 is done: five mutation classes, one sanitizer that closes them.
+  <a href="../../track3-frontier/09-parser-differentials/tutorial.html">Module 9</a> opens
+  Track 3 &mdash; the frontier. It zooms out: the mXSS round trip is one member of a family
+  of <em>seven</em> HTML sinks, and the same string can produce seven different trees.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../07-mxss-template/tutorial.html">Module 7 · Template</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../../track3-frontier/09-parser-differentials/tutorial.html">Module 9 · Parser differentials &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/hardened.mjs</code> + <code>engine/mxss-lab/sanitizers.mjs</code>
+  (<code>hardenedSanitizer</code>). Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.
+  Citations: <a href="../../REFERENCES.md">REFERENCES.md</a> [R8], [R12], [S2], [S3].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. All 12 "CLOSED" and 4
+  "PRESERVED" verdicts verified: each cleaned string re-parsed with scripting on and checked
+  for live handlers.</p>
+</div>
+
+</div>
+</body>
+</html>
