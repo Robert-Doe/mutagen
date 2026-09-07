@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 3 — proof: rawtext wrapper removal (blocked) vs the regex filter</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Module 3 · proof.html · run in a real browser</p>
+  <h1>Rawtext<em>blocked here, real there</em></h1>
+  <p class="thesis">Rows 1&ndash;4: raw-text wrapper removal through a correct
+  <b>tree</b> sanitizer &mdash; every one <span class="no">blocked</span> (the point of the
+  module). Rows 5&ndash;6: the same job done by a <b>regex</b> filter &mdash; two decades-old
+  bypasses <span class="yes">fire</span>.</p>
+</header>
+<section class="mod">
+  <div class="modhead"><span class="modnum">▶</span><h2>Results</h2></div>
+  <div id="out" class="tblwrap"></div>
+  <p id="log" class="thesis"></p>
+</section>
+<script>
+const fired = new Set();
+window.__b = t => fired.add(t);
+
+// tree sanitizer: template parse (off), strict allow-list, unwrap the rest, serialize
+function treeSanitize(html) {
+  const allow = new Set(['A','B','I','EM','P','BR','SPAN','DIV','UL','OL','LI','IMG','CODE','PRE']);
+  const tpl = document.createElement('template'); tpl.innerHTML = html;
+  (function walk(node){
+    for (const c of [...node.childNodes]) {
+      if (c.nodeType === 8) { c.remove(); continue; }
+      if (c.nodeType !== 1) continue;
+      if (c.namespaceURI !== 'http://www.w3.org/1999/xhtml' || !allow.has(c.tagName)) {
+        walk(c); c.replaceWith(...c.childNodes); continue;
+      }
+      for (const a of [...c.attributes]) if (/^on/i.test(a.name)) c.removeAttribute(a.name);
+      walk(c);
+    }
+  })(tpl.content);
+  const box = document.createElement('div'); box.appendChild(tpl.content.cloneNode(true)); return box.innerHTML;
+}
+// regex filter (realistic)
+function regexSanitize(html) {
+  return html
+    .replace(/<\s*script\b[\s\S]*?<\s*\/\s*script\s*>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*("javascript:[^"]*"|javascript:[^\s>]+)/gi, '$1="#"');
+}
+
+const rows = [
+  ['tree', 'M3 <title>',   treeSanitize, '<title><img src=x onerror=__b("t1")></title>'],
+  ['tree', 'M3 <style>',   treeSanitize, '<style><img src=x onerror=__b("t2")></style>'],
+  ['tree', 'M3 <xmp>',     treeSanitize, '<xmp><img src=x onerror=__b("t3")></xmp>'],
+  ['tree', 'M3 <textarea>',treeSanitize, '<textarea><img src=x onerror=__b("t4")></textarea>'],
+  ['regex','/ before on*', regexSanitize,'<img/onerror=__b("r1")//src=x>'],
+  ['regex','entity scheme',regexSanitize,'<a href=&#106;avascript:__b("r2")>x</a>'],
+];
+const results = [];
+for (const [kind, name, fn, payload] of rows) {
+  const cleaned = fn(payload);
+  const host = document.createElement('div'); host.style.display = 'none'; document.body.appendChild(host);
+  host.innerHTML = cleaned;
+  // regex r2 is a link — click it
+  const a = host.querySelector('a[href^="&#106;"], a[href*="avascript"]'); if (a) try { a.click(); } catch(e){}
+  results.push({ kind, name, cleaned });
+}
+setTimeout(() => {
+  let html = '<table><thead><tr><th>sanitizer</th><th>vector</th><th>fired?</th><th>cleaned output</th></tr></thead><tbody>';
+  for (const r of results) {
+    const anyRegexFired = fired.has('r1') || fired.has('r2');
+    const isThisRow = (r.name.includes('before on') && fired.has('r1')) || (r.name.includes('entity') && fired.has('r2'));
+    html += `<tr><td>${r.kind}</td><td>${r.name}</td><td>${isThisRow ? '<span class="yes">FIRED</span>' : '<span class="no">no</span>'}</td><td><code>${r.cleaned.replace(/</g,'&lt;').slice(0,80)}</code></td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('out').innerHTML = html;
+  document.getElementById('log').textContent = 'Handlers that fired: ' + JSON.stringify([...fired]) +
+    '.  Expected: the two regex rows fire; every tree-sanitizer row is blocked.';
+}, 400);
+</script>
+</div>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 3 — mXSS via RCDATA / Rawtext Wrapper Removal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 2 · Module 3 of 11 · The Mutation Catalogue</p>
+  <h1>Rawtext Wrapper Removal<em>the mutation everyone expects</em></h1>
+  <p class="thesis">The intuitive mXSS: a sanitizer deletes a <code>&lt;title&gt;</code> or
+  <code>&lt;xmp&gt;</code> it doesn't like, and its inert text content springs to life on
+  re-parse. This module <b>proves that a correct serializer stops it</b> &mdash; and shows
+  the three ways that proof falls apart.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>Text promoted out of a raw-text element is <span class="hi">escaped</span> by the
+    serializer, so the naive rawtext mXSS is closed. It re-opens if (1) the filter is
+    string-based, (2) the wrapper is <em>kept</em>, or (3) a namespace / scripting flag /
+    template is in play &mdash; Modules 4, 5, 7.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../prerequisites/prerequisites.html">Prereq 6 · Content models</a>
+    <a class="tag" href="../../track1-engine/02-serializer-roundtrip/tutorial.html">Module 2 · The serializer</a>
+    <a class="tag" href="concept_how_they_connect.html">Vocabulary web · mXSS vs DOM XSS vs stored vs clobbering</a>
+    <a class="tag" href="../../../bob_browser_tokenization/modules/a3-security/tutorial.html">Tokenization · A3 (the mechanism, imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>A sealed drum arrives at Kofi's shed labelled <code>&lt;xmp&gt; engine oil</code>. The
+    rule for a sealed oil drum: don't open it, don't sort it, just log the label and pass it.
+    Inside, though, is a smaller box marked <code>contraband</code>. As long as the drum stays
+    sealed, the box is going nowhere.</p>
+    <p>Now the next officer decides the shed isn't licensed for oil and <em>removes the drum</em>
+    &mdash; tips the contents onto the sorting table. Here is the thing the attacker was
+    counting on and the thing that actually saves the day: when Kofi writes the contents onto
+    the <em>open</em> manifest, he is required to <strong>quote every field</strong>. The box
+    marked <code>contraband</code> gets written as the literal text <code>"contraband"</code>
+    &mdash; a label, not a command. The next officer reads a crate <em>named</em> "contraband",
+    shrugs, and moves on. The drum's seal being broken didn't help the smuggler, because the
+    open-manifest quoting rule caught what the sealed-drum rule would have hidden.</p>
+    <p>Unless&hellip; the drum is <em>kept</em> (still sealed, still not quoted). Or the clerk
+    doing the check just runs a text search over the paperwork instead of opening anything. Or
+    the drum was in the <em>fishing co-op's</em> hall, where the rules are different. Those are
+    Modules 5, "the regex", and 4/7.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li>Attacker submits <code>&lt;title&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/title&gt;</code>.</li>
+      <li>The sanitizer parses it (scripting off). <code>&lt;title&gt;</code> is RCDATA, so
+      its content is <strong>one text node</strong>: <code>"&lt;img src=x onerror=alert(1)&gt;"</code>.
+      No element, no handler.</li>
+      <li><code>&lt;title&gt;</code> isn't on the allow-list. The sanitizer removes it and
+      <strong>keeps its children</strong> &mdash; promoting that text node to be a direct
+      child of the fragment.</li>
+      <li>The sanitizer serializes. The text node's parent is now the fragment root, not
+      <code>&lt;title&gt;</code>, so the serializer <strong>escapes</strong> it:
+      <code>&amp;lt;img src=x onerror=alert(1)&amp;gt;</code>.</li>
+      <li>The browser re-parses that at <code>innerHTML</code>. <code>&amp;lt;</code> is a
+      character reference for <code>&lt;</code> &mdash; it decodes to a literal
+      <code>&lt;</code> <em>character in a text node</em>, not a tag. <strong>Inert.</strong></li>
+    </ol>
+    <p>Step 4 is the save. Verified for <code>style script xmp iframe noembed noframes title
+    textarea</code> against Chrome 148: the promoted text always comes out escaped.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox">
+      <h4>What the sanitizer sees (scripting off)</h4>
+      <pre class="tree">#fragment
+└─ title
+   └─ #text "&lt;img src=x onerror=alert(1)&gt;"</pre>
+    </div>
+    <div class="railbox">
+      <h4>What it ships, and what the browser builds</h4>
+      <pre class="tree">ship  ►  &amp;lt;img src=x onerror=alert(1)&amp;gt;
+build ►  #fragment
+         └─ #text "&lt;img src=x onerror=alert(1)&gt;"   <span class="caret">a string. inert.</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The DOM sanitizer's "remove but keep children" branch, and the serializer step that saves
+  it:</p>
+  <pre><code><span class="c">// sanitizer: element not allowed → drop it, promote its cleaned children</span>
+if (!allowed) {
+  clean(child);
+  for (const g of childrenOf(child)) { g.parent = node; out.push(g); }
+  continue;
+}
+
+<span class="c">// serializer: a text node under a NORMAL parent is escaped</span>
+out += NO_ESCAPE_TEXT.has(parentName) ? child.data : escapeText(child.data);
+<span class="c">//                    ▲ style/script/xmp/...        ▲ &lt; &gt; &amp; → &amp;lt; &amp;gt; &amp;amp;</span></code></pre>
+  <p>And the string filter that has none of this protection:</p>
+  <pre><code>regexSanitizer('<span class="r">&lt;img/onerror=alert(1)//src=x&gt;</span>')
+  <span class="c">// the rule is  /\son\w+\s*=/  — it needs whitespace before "on".</span>
+  <span class="c">// "/onerror" has a slash. Nothing is stripped. Payload ships intact.</span></code></pre>
+  <p>Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Actually fire an alert through a correct sanitizer using rawtext alone &mdash; you can't, and that's the finding</li>
+        <li>Exploit a <em>kept</em> <code>&lt;style&gt;</code> &mdash; needs a namespace (M5) or template (M7) to change what <code>&lt;/style&gt;</code> means on reparse</li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Prove the naive rawtext mXSS is closed, for every raw-text element, against Chrome 148</li>
+        <li>Name the single serializer step (<code>escapeText</code> on promoted text) the whole result depends on</li>
+        <li>Bypass a realistic <em>string</em> sanitizer two different ways</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track2-mxss\03-mxss-rcdata
+node test\demo.mjs
+<span class="c"># then open proof.html in a browser and read the four rows</span></code></pre>
+    <span class="lab">Expected output (captured from a real run)</span>
+    <pre><code>MODULE 3 — mXSS via RCDATA / Rawtext Wrapper Removal
+
+  PASS  BLOCKED: &lt;title&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/title&gt;
+  PASS  BLOCKED: &lt;style&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/style&gt;
+  PASS  BLOCKED: &lt;xmp&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/xmp&gt;
+  PASS  BLOCKED: &lt;textarea&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/textarea&gt;
+  PASS  BLOCKED: &lt;noembed&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/noembed&gt;
+  PASS  serializer escapes text promoted out of &lt;style&gt;   (×8 raw-text elements)
+  PASS  regex sanitizer: bypassed by "/" instead of whitespace before on*
+  PASS  regex sanitizer: bypassed by an entity-encoded scheme
+  PASS  DOM sanitizer: NOT bypassed by either of those
+  PASS  if the wrapper is KEPT (allowed), raw serialization is a live hazard on reparse
+
+  17 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>proof.html shows every row green ("blocked")</strong> &mdash; that is correct
+    and expected. This module's whole point is that the DOM sanitizer wins here. The rows that
+    are supposed to be red are the two <em>regex</em> rows.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The sanitizer removes <code>&lt;title&gt;</code> and keeps its text, which the
+    serializer escapes. What if the sanitizer instead <em>keeps</em> <code>&lt;title&gt;</code>
+    (it's on a permissive allow-list) with text content
+    <code>&lt;/title&gt;&lt;img src=x onerror=alert(1)&gt;</code>? Does the escape still save you?</summary>
+    <p><strong>Yes, still saved &mdash; because <code>&lt;title&gt;</code> is RCDATA, not raw
+    text.</strong> The serializer's no-escape list is <code>style script xmp iframe noembed
+    noframes noscript plaintext</code>. <code>&lt;title&gt;</code> and
+    <code>&lt;textarea&gt;</code> are <em>not</em> on it &mdash; their text content <em>is</em>
+    escaped on serialize. So a kept <code>&lt;title&gt;</code> ships as
+    <code>&lt;title&gt;&amp;lt;/title&amp;gt;&amp;lt;img&hellip;&amp;gt;&lt;/title&gt;</code>
+    and stays inert. The genuinely dangerous "kept wrapper" is <code>&lt;style&gt;</code> or
+    <code>&lt;xmp&gt;</code> &mdash; those emit raw &mdash; and even then you need a context
+    change on reparse for the <code>&lt;/style&gt;</code> to bite. That's Module 5.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: So Heiderich's 2013 paper was wrong about rawtext mXSS?</div>
+    <div class="a">A: No &mdash; it was right for 2013. Old IE's <code>innerHTML</code>
+    serializer did <em>not</em> reliably escape, and lots of sanitizers were string-based. The
+    class was real and widespread. Browser serializers were hardened over the following
+    decade specifically to close it. The <em>mechanism</em> the paper named is still exactly
+    what Modules 4&ndash;7 exploit; only the plain rawtext-only version got fixed.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Why does <code>&lt;style&gt;</code> get raw serialization when <code>&lt;title&gt;</code> doesn't?</div>
+    <div class="a">A: <code>&lt;style&gt;</code> holds CSS, which is full of <code>&gt;</code>
+    (child selectors) and <code>&amp;</code> (nesting) &mdash; escaping it would corrupt the
+    stylesheet. <code>&lt;title&gt;</code> holds a plain string; escaping it is harmless. The
+    spec draws the line by usefulness, and that line is the attack surface.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Is the "regex sanitizer" a straw man?</div>
+    <div class="a">A: Regex-only HTML sanitizers still ship in the wild &mdash; in template
+    engines, in "quick fixes", in languages without a good DOM library. The bypasses shown
+    here (<code>/</code> as a separator, entity-encoded schemes) are decades old and still
+    work. The point of the module is the <em>contrast</em>: the same two payloads that walk
+    straight past the regex are stopped cold by the tree walk.</div></div>
+
+    <div class="qa-item"><div class="q">Q: <code>&lt;plaintext&gt;</code> is in the no-escape list &mdash; is it a vector?</div>
+    <div class="a">A: <code>&lt;plaintext&gt;</code> has no end tag &mdash; once opened it eats
+    the rest of the input. A sanitizer can't "remove the wrapper and promote children"
+    because everything after it <em>is</em> the children, as one text node. Weird, but not a
+    mutation vector. It mostly shows up as a denial-of-content bug.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Rawtext alone is closed. But "the rules are different in the fishing co-op's hall" is
+  three separate cracks. <a href="../04-mxss-noscript/tutorial.html">Module 4</a> takes the
+  first: <code>&lt;noscript&gt;</code>, an element that a server-side sanitizer and a browser
+  parse into two <em>different trees</em> because of one boolean flag.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../../track1-engine/02-serializer-roundtrip/tutorial.html">Module 2 · The serializer</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../04-mxss-noscript/tutorial.html">Module 4 · The scripting flag &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/rcdata.mjs</code>. Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.
+  Vocabulary web: <a href="concept_how_they_connect.html">the XSS family tree</a>. Citations:
+  <a href="../../REFERENCES.md">REFERENCES.md</a> [R7], [S1].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. "BLOCKED" results verified
+  against Chrome 148; the regex bypasses are decades-documented and re-confirmed here.</p>
+</div>
+
+</div>
+</body>
+</html>

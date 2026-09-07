@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vocabulary web — the XSS family tree</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Module 3 · Vocabulary web</p>
+  <h1>"Just XSS"<em>six things people call the same name</em></h1>
+  <p class="thesis">Mutation XSS is one leaf on a family tree. Knowing where it sits keeps you
+  from applying the wrong defence.</p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>Side by side</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Term</th><th>Where the attacker's markup enters</th><th>Where it runs</th><th>Primary defence</th></tr></thead>
+    <tbody>
+      <tr><td><strong>reflected XSS</strong></td><td>a URL parameter, echoed into the response by the <em>server</em></td><td>on page load</td><td>output encoding on the server; CSP</td></tr>
+      <tr><td><strong>stored XSS</strong></td><td>a database field (comment, profile), rendered later by the server</td><td>on every view</td><td>output encoding; sanitise on write <em>and</em> read</td></tr>
+      <tr><td><strong>DOM XSS</strong></td><td>attacker data reaches a client-side sink (<code>innerHTML</code>, <code>eval</code>) via JS &mdash; server never sees it as markup</td><td>in the browser, after load</td><td>Trusted Types; safe sinks; client-side sanitise</td></tr>
+      <tr><td><strong>mutation XSS (mXSS)</strong></td><td>a string that a <em>client-side sanitizer approved</em>, then the browser re-parsed differently</td><td>when the sanitized string hits <code>innerHTML</code></td><td>idempotent (loop-to-fixed-point) sanitise; namespace enforcement; the native Sanitizer API</td></tr>
+      <tr><td><strong>self-XSS</strong></td><td>the victim pastes attacker-supplied JS into their own devtools console</td><td>when they press enter</td><td>social &mdash; console warnings; not a code bug</td></tr>
+      <tr><td><strong>DOM clobbering</strong></td><td>named elements (<code>&lt;a id=x&gt;</code>) injected so <code>window.x</code> resolves to a node</td><td>when script reads the clobbered global &mdash; <em>no script injection needed</em></td><td>don't trust <code>document.x</code>/<code>window.x</code>; explicit lookups</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The chain — mXSS is a special case of DOM XSS</h2></div>
+  <div class="spec">
+<pre class="tree">                   ┌── reflected XSS ──┐
+   server-side XSS ─┤                    ├─ defence: server output encoding
+                   └── stored XSS ──────┘
+
+   client-side XSS ── DOM XSS ─┬─ "plain" DOM XSS: data → innerHTML, no sanitiser
+                               │
+                               └─ <span class="new">MUTATION XSS</span>: data → sanitiser → serialise → innerHTML
+                                     the sanitiser said yes.
+                                     the re-parse changed the answer.
+
+   not-quite-XSS ──┬─ self-XSS  (victim runs it themselves)
+                   └─ DOM clobbering  (no JS injected at all)</pre>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>Commonly confused pairs</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>The wrong statement</th><th>The correction</th></tr></thead>
+    <tbody>
+      <tr><td>"We sanitise with DOMPurify, so we can't have mXSS."</td><td>mXSS is the failure mode <em>of</em> a sanitiser. It is specifically what a sanitiser misses. Historic DOMPurify bypasses <em>are</em> mXSS.</td></tr>
+      <tr><td>"mXSS and DOM XSS are different problems."</td><td>mXSS <em>is</em> DOM XSS &mdash; the subclass where a sanitiser was in the path and got out-manoeuvred by serialise+reparse.</td></tr>
+      <tr><td>"A strict CSP stops mXSS."</td><td>It stops the <em>payload executing</em> (no inline handlers, no eval), which is real defence-in-depth &mdash; Module 11. It does not stop the mutation; the dangerous node is still built.</td></tr>
+      <tr><td>"DOM clobbering is a kind of XSS."</td><td>No script is injected. It corrupts a variable a script later trusts. Different mechanism, different fix. Named here only to keep it separate.</td></tr>
+      <tr><td>"Output encoding fixes mXSS."</td><td>Output encoding fixes reflected/stored XSS. mXSS happens <em>after</em> the value is already a trusted string in the browser; there is nothing left to encode.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>Scenario-matching quiz</h2></div>
+  <details><summary>A search page reflects <code>?q=</code> into <code>&lt;h1&gt;Results for X&lt;/h1&gt;</code> server-side, unencoded. Which kind?</summary><p><strong>Reflected XSS.</strong> Fix: encode on the server. No sanitiser, no browser re-parse involved.</p></details>
+  <details><summary>A rich-text comment is run through a client-side allow-list sanitiser, and the sanitised HTML is assigned to <code>commentEl.innerHTML</code>. An attacker finds an input the sanitiser passes but the browser parses into a live handler. Which kind?</summary><p><strong>Mutation XSS.</strong> The sanitiser is in the path and its output re-parsed differently. Fix: loop-to-fixed-point sanitising, namespace enforcement, or the native Sanitizer API (Module 11).</p></details>
+  <details><summary>An attacker submits <code>&lt;a id=defaultView&gt;&lt;a id=defaultView name=x&gt;</code>; later the page's own script does <code>window.defaultView.x</code>. Which kind?</summary><p><strong>DOM clobbering.</strong> Not XSS &mdash; no attacker script runs. The page's own script reads an attacker-controlled node.</p></details>
+  <details><summary>A user pastes <code>fetch('/api/keys').then(...)</code> into their browser console because a "tutorial" told them to. Which kind?</summary><p><strong>Self-XSS.</strong> Defence is a console warning banner and user education, not code.</p></details>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Back to</span><a href="tutorial.html">Module 3 tutorial</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../04-mxss-noscript/tutorial.html">Module 4 &rarr;</a></span>
+</div>
+<div class="provenance"><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07.</div>
+
+</div>
+</body>
+</html>
