@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A History of Mutation XSS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Lesson cluster 01 · spans Modules 3&ndash;11</p>
+  <h1>A History of Mutation XSS<em>2013 &rarr; the Sanitizer API</em></h1>
+  <p class="thesis">A timeline no single module owns: where the class was named, how the
+  bypass-and-patch cycle ran for a decade, and why the platform's structural answer
+  arrived when it did. Read this after Module 5; it makes every later module land.</p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">☞</span><h2>Sekondi</h2></div>
+  <div class="sekondi">
+    <p>Kofi's customs shed didn't get safe in one memo. Someone found a hole; the rulebook
+    got an amendment; someone found the next hole. For years. The amendments piled up until
+    the supervisor realised the <em>procedure itself</em> &mdash; seal the crate, send it on,
+    let someone downstream re-open it &mdash; was the hole. The fix wasn't another amendment.
+    It was wheeling the goods onto the floor without a crate. That last move is the Sanitizer
+    API. Everything before it is amendments.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The timeline</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>When</th><th>What</th><th>Which mechanism (course module)</th></tr></thead>
+    <tbody>
+      <tr><td>pre-2013</td><td>IE's <code>innerHTML</code> serializer is known to be lossy; backtick attributes, CSS <code>expression()</code>. Sanitizers are mostly regex.</td><td>attribute serialization (M6); string filters (M3)</td></tr>
+      <tr><td><strong>2013</strong></td><td><strong>Heiderich, Schwenk, Frosch, Magazinius, Yang &mdash; "mXSS Attacks" (CCS 2013).</strong> Names the class. Shows <code>innerHTML</code> read/write is not idempotent and that "sanitize the string" is structurally unsafe.</td><td>the whole premise (M2, M9)</td></tr>
+      <tr><td>2014&ndash;2015</td><td>DOMPurify released (cure53). Parse-based, not regex. The right idea &mdash; and now the target.</td><td>M8 (the correct approach)</td></tr>
+      <tr><td>2015&ndash;2018</td><td>Masato Kinugawa and others file a steady stream of DOMPurify bypasses: <code>&lt;svg&gt;</code>, <code>&lt;math&gt;</code>, <code>&lt;form&gt;</code> nesting, <code>&lt;template&gt;</code>. Each patched within days.</td><td>namespace (M5), template (M7)</td></tr>
+      <tr><td><strong>2019</strong></td><td><strong>Michał Bentkowski &mdash; "Mutation XSS in Google Search"</strong> (<code>&lt;noscript&gt;</code> scripting flag) and <strong>"DOMPurify 2.0.0 bypass"</strong> (<code>&lt;form&gt;</code>/<code>&lt;math&gt;</code>/<code>&lt;mglyph&gt;</code> namespace confusion). Also the AMP4Email / Gmail mXSS.</td><td>M4, M5</td></tr>
+      <tr><td><strong>~2020</strong></td><td><strong>Chrome and Firefox start escaping <code>&lt;</code> and <code>&gt;</code> in attribute-value serialization.</strong> Quietly kills an entire generation of "entity in an attribute" payloads &mdash; including the most-quoted one.</td><td>M2, M6 (the four-character fix)</td></tr>
+      <tr><td>2020</td><td>DOMPurify 2.0.17: <code>_checkValidNamespace</code>. CVE-2020-26870 assigned to the pre-fix versions.</td><td>M5, M10</td></tr>
+      <tr><td>2021&ndash;2024</td><td>Sonar, Kevin Mizu, and others: deeper nesting bypasses, <code>&lt;style&gt;</code>/CSS mXSS, declarative shadow DOM surface. The cycle continues but the payloads get more baroque.</td><td>M5, M7, M8 brain exercise</td></tr>
+      <tr><td><strong>2023&ndash;2026</strong></td><td><strong>The HTML Sanitizer API ships</strong> &mdash; <code>Element.setHTML()</code>, <code>setHTMLUnsafe()</code>, <code>Document.parseHTMLUnsafe()</code>. Parse once, filter the tree, insert. No serialize step. In Chrome 148 by default.</td><td>M11 (the structural answer)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The shape of the decade</h2></div>
+  <div class="spec">
+<pre class="tree">2013  premise stated  ──────────────────────────────────────────►  2026 premise removed
+         │                                                              │
+         ▼                                                              ▼
+   "sanitize the string                                          "don't produce a
+    is unsafe because                                             string — hand the
+    parse∘serialize                                               caller a filtered
+    isn't idempotent"                                             tree"
+         │                                                              ▲
+         ▼                                                              │
+   ┌─────────────── the amendment years ───────────────┐               │
+   │  bypass → patch → bypass → patch ...              │               │
+   │  browser serializer hardening (attrs, ~2020)      ├───────────────┘
+   │  DOMPurify: namespace check, forbidden lists,     │  each amendment closed
+   │  the round-trip loop, then its removal            │  instances; none closed
+   │  ~12 CVEs, dozens of issues                       │  the class
+   └───────────────────────────────────────────────────┘</pre>
+  </div>
+  <p>The deep dives take two slices of this: <a href="02_deepdive_heiderich_era.html">the
+  Heiderich era and why regex sanitizers lost</a>, and <a href="03_deepdive_dompurify_bypass_chain.html">the
+  DOMPurify bypass chain</a>, generation by generation, with the patch each one forced.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>Alternative implementations, at a glance</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Sanitizer</th><th>Language / runtime</th><th>Approach</th><th>mXSS posture</th></tr></thead>
+    <tbody>
+      <tr><td>DOMPurify</td><td>JS (browser + jsdom)</td><td>parse (real DOM) → walk allow-list → serialize</td><td>the reference; the round trip is its exposure, mitigated by namespace checks + stable rebuild</td></tr>
+      <tr><td>sanitize-html</td><td>Node</td><td>parse (htmlparser2) → allow-list → re-emit</td><td>parser is not the browser's — parser-differential risk (M9)</td></tr>
+      <tr><td>Ammonia</td><td>Rust</td><td>parse (html5ever, spec-compliant) → allow-list → serialize</td><td>spec-compliant parser narrows the gap; serialize step remains</td></tr>
+      <tr><td>Loofah / Rails <code>sanitize</code></td><td>Ruby (Nokogiri/libxml)</td><td>parse → scrub → serialize</td><td>libxml is not the browser parser — historically several mXSS</td></tr>
+      <tr><td><strong>Sanitizer API</strong></td><td>the browser</td><td>parse once → filter tree → <strong>insert</strong></td><td>no serialize step → the class has nowhere to live</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Related</span><a href="../../track2-mxss/05-mxss-namespace/tutorial.html">Module 5 · Namespace</a></span>
+  <span class="next"><span class="dir">Next</span><a href="02_deepdive_heiderich_era.html">Deep dive · The Heiderich era &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Citations: <a href="../../REFERENCES.md">REFERENCES.md</a> [R7]&ndash;[R15], [R6].
+  See <a href="../README.md">lessons/README.md</a> for how this cluster relates to the modules.</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07.</p>
+</div>
+
+</div>
+</body>
+</html>

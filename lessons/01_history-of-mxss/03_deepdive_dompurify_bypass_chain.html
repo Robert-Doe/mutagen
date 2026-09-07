@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep dive — The DOMPurify Bypass Chain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Lesson 01 · Deep dive 2 of 2</p>
+  <h1>The DOMPurify Bypass Chain<em>generation by generation</em></h1>
+  <p class="thesis">DOMPurify did everything right &mdash; parse-based, allow-list, actively
+  maintained &mdash; and still absorbed a decade of bypasses. Each one forced a specific,
+  small, permanent change. This is that list.</p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>Generations</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Gen</th><th>Shape</th><th>Root cause (Q4 hinge)</th><th>The permanent fix</th></tr></thead>
+    <tbody>
+      <tr><td>1<br>2015&ndash;17</td><td><code>&lt;svg&gt;&lt;style&gt;&lt;a title="&lt;/style&gt;&lt;img&hellip;&gt;"&gt;</code> and kin (Kinugawa)</td><td>attribute value re-emitted with raw <code>&lt;</code>; <code>&lt;style&gt;</code> raw serialization</td><td>browser: escape <code>&lt;&gt;</code> in attributes (~2020). DOMPurify: `SAFE_FOR_TEMPLATES`, style content handling.</td></tr>
+      <tr><td>2<br>2019</td><td><code>&lt;form&gt;&lt;math&gt;&lt;mtext&gt;&lt;/form&gt;&lt;form&gt;&lt;img&hellip;&gt;</code> (Bentkowski, DOMPurify 2.0.0)</td><td>"form in form" reparents the <code>&lt;img&gt;</code>; the walk, iterating a live list, skips it; no namespace check on the promoted node</td><td>DOMPurify: iterate a static node list; <code>_checkValidNamespace</code>; the "clobbered / mutated during walk" re-check.</td></tr>
+      <tr><td>2<br>2019</td><td><code>&lt;math&gt;&lt;mtext&gt;&lt;mglyph&gt;&lt;style&gt;&lt;img&hellip;&gt;</code> (Bentkowski)</td><td><code>&lt;mglyph&gt;</code> keeps the parser in MathML, so <code>&lt;style&gt;</code> is not rawtext and <code>&lt;img&gt;</code> is a real child</td><td>DOMPurify: <code>&lt;mglyph&gt;</code>/<code>&lt;malignmark&gt;</code> forced-removed; namespace validity table tightened.</td></tr>
+      <tr><td>2<br>2019</td><td><code>&lt;svg&gt;&lt;/p&gt;&lt;style&gt;&lt;a id="&lt;/style&gt;&lt;img&hellip;&gt;"&gt;</code> (CVE-2020-26870, DOMPurify &lt; 2.0.17)</td><td>same namespace/serialization family; assigned a CVE because it was a clean, reliable bypass of a widely-deployed version</td><td>DOMPurify 2.0.17: the namespace check. Browser attr escaping also closes it.</td></tr>
+      <tr><td>3<br>2020&ndash;24</td><td>deeper nesting; <code>&lt;template&gt;</code> content; declarative shadow DOM (<code>shadowrootmode</code>); CSS-level mXSS in a kept <code>&lt;style&gt;</code> (Sonar, Mizu)</td><td>sanitizer doesn't descend into a special sub-tree (<code>.content</code>, shadow root); or allows a mutating element and doesn't prove its serialization round-trips</td><td>DOMPurify: NodeIterator enters template content; DSD handling; per-generation forbidden-attribute additions.</td></tr>
+      <tr><td>4<br>2023+</td><td>&mdash; the platform stops playing</td><td>the serialize step itself</td><td><strong>Sanitizer API</strong>: no serialize step (Module 11). DOMPurify gains a native fast path and stays as fallback.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The pattern in the fixes</h2></div>
+  <div class="spec">
+    <p>Every DOMPurify security fix is one of exactly four moves &mdash; the same four Module 8
+    builds:</p>
+    <ol>
+      <li><strong>Add to the forbidden list</strong> (an element or attribute whose contents
+      or effect can't be safely serialized): <code>&lt;mglyph&gt;</code>,
+      <code>&lt;template&gt;</code> by default, <code>shadowrootmode</code>.</li>
+      <li><strong>Tighten the namespace check</strong>: which element is valid in which
+      namespace, and reject the rest.</li>
+      <li><strong>Fix the walk</strong>: static node list; re-check nodes that were mutated
+      or clobbered during the pass; enter special sub-trees.</li>
+      <li><strong>Stabilize the output</strong>: the round-trip loop (later: rebuild from a
+      stable serialization and diff).</li>
+    </ol>
+    <p>New disclosure &rarr; identify which of the four it defeats &rarr; that's the fix. This
+    is why Module 10's <code>classifyHinge</code> has five families and Module 8's sanitizer
+    has four ideas: after a decade, the space is <em>closed and small</em>.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>Finding the primary sources</h2></div>
+  <div class="spec">
+    <ul>
+      <li><strong>DOMPurify <code>CHANGELOG.md</code></strong> &mdash; security releases are
+      tagged; each links a GitHub issue &rarr; fix PR &rarr; the exact diff.</li>
+      <li><strong>research.securitum.com</strong> &mdash; Bentkowski's write-ups, with
+      reproduction steps and the version they worked against.</li>
+      <li><strong>cure53.de/pentest-report_dompurify.pdf</strong> and the DOMPurify wiki
+      &mdash; design rationale for the four moves above.</li>
+      <li><strong>Chromium/Gecko bug trackers</strong> &mdash; for the ~2020 attribute
+      serialization change, search <code>crbug</code> / bugzilla for "serialize attribute
+      value" + "&lt;" ; the payload simply stopped working in a specific milestone.</li>
+    </ul>
+  </div>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="02_deepdive_heiderich_era.html">Deep dive · The Heiderich era</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../../track3-frontier/11-native-sanitizer-api/tutorial.html">Module 11 · The Sanitizer API &rarr;</a></span>
+</div>
+<div class="colophon"><h3>Colophon</h3><p>Citations: [R9]&ndash;[R14]. <strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. Gen-2 payloads reproduced firing in Chrome 148 against a naive sanitizer (Module 5 proof.html); Gen-1 confirmed patched.</p></div>
+
+</div>
+</body>
+</html>

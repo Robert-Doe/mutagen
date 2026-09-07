@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep dive — The Heiderich Era &amp; why regex sanitizers lost</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Lesson 01 · Deep dive 1 of 2</p>
+  <h1>The Heiderich Era<em>and why regex sanitizers lost</em></h1>
+  <p class="thesis">The 2013 CCS paper didn't find a bug. It found that the whole
+  <em>category</em> of "clean the HTML string" was unsound &mdash; and it did so by
+  attacking the one operation everyone trusted: reading <code>.innerHTML</code> back out.</p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>What the paper actually claimed</h2></div>
+  <div class="spec">
+    <p>"mXSS Attacks: Attacking well-secured Web-Applications by using innerHTML Mutations",
+    Heiderich / Schwenk / Frosch / Magazinius / Yang, ACM CCS 2013. The core claims:</p>
+    <ul>
+      <li>When you set <code>el.innerHTML = s</code> and then read <code>el.innerHTML</code>
+      back, the browser does not return <code>s</code>. It returns
+      <code>serialize(parse(s))</code> &mdash; and that is a <em>different string</em>.</li>
+      <li>The difference is not random. It follows the serializer's rules, and an attacker
+      can steer it: choose an <code>s</code> that is inert, but whose serialization &mdash; or
+      whose serialization <em>re-parsed</em> &mdash; is not.</li>
+      <li>Therefore any sanitizer that inspects a string and emits a string, without
+      accounting for what the browser will do on the next parse, is bypassable by
+      construction. Not "has a bug". <em>Is unsound.</em></li>
+    </ul>
+    <p>This is exactly the result Modules 2 and 9 reproduce with our engine, thirteen years
+    later, against Chrome 148: <code>serialize(parse("a&lt;b&gt;c"))</code> is
+    <code>"a&lt;b&gt;c&lt;/b&gt;"</code>. The identity fails even for trivial input.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The era's payloads &mdash; and why most are dead</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Vector</th><th>Why it worked in 2013</th><th>Status 2026</th></tr></thead>
+    <tbody>
+      <tr><td>backtick attributes <code>&lt;img src=`x`onerror=alert(1)&gt;</code></td><td>IE treated <code>`</code> as a quote char in unquoted values</td><td class="no">dead &mdash; no shipping browser does this</td></tr>
+      <tr><td>CSS <code>expression()</code> / <code>-moz-binding</code> via a kept <code>&lt;style&gt;</code></td><td>IE and old Gecko ran JS from CSS</td><td class="no">dead &mdash; both features removed</td></tr>
+      <tr><td><code>&lt;xmp&gt;</code>/<code>&lt;listing&gt;</code> content mutation</td><td>IE's serializer emitted raw <code>&lt;</code> and mis-escaped on the way back</td><td class="no">mostly dead &mdash; modern serializer escapes promoted text (M3)</td></tr>
+      <tr><td>entity in an attribute (<code>title="&amp;lt;img&hellip;&amp;gt;"</code>)</td><td>serializers escaped <code>&amp;</code>/<code>"</code> only</td><td class="no">dead &mdash; browsers escape <code>&lt;&gt;</code> in attrs (~2020, M6)</td></tr>
+      <tr><td>namespace confusion (<code>&lt;svg&gt;</code>/<code>&lt;math&gt;</code>)</td><td>parsers newly supported foreign content; sanitizers didn't model it</td><td class="yes"><strong>still live</strong> against sanitizers that skip the namespace check (M5)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Four of five families closed by serializer hardening. The fifth &mdash; namespace &mdash;
+  needed sanitizers to change, and is the one Module 5 still demonstrates firing.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>Why regex lost, precisely</h2></div>
+  <div class="analogy">
+    <p>A regex sees a <em>ribbon of characters</em>. The browser sees a <em>tree</em>, built
+    by a state machine with 80 states and a stack. The regex asks "does this substring look
+    like <code>onerror=</code>?". The browser asks "given everything above me on the stack and
+    which tokenizer state I'm in, is this an attribute?". Those are not the same question, and
+    no amount of regex cleverness closes the gap &mdash; because the gap is
+    <em>Turing-machine vs. finite automaton</em>, formally.</p>
+  </div>
+  <div class="spec">
+    <p>Module 3 shows two decades-old regex bypasses still working against a realistic
+    string filter: <code>&lt;img/onerror=alert(1)//src=x&gt;</code> (no whitespace before
+    <code>on</code>) and <code>&lt;a href=&amp;#106;avascript:&hellip;&gt;</code> (entity-encoded
+    scheme). The same two payloads are stopped cold by the tree walk in the same module. That
+    contrast <em>is</em> the Heiderich result, in miniature.</p>
+  </div>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="01_explainer.html">Lesson 01 · explainer</a></span>
+  <span class="next"><span class="dir">Next</span><a href="03_deepdive_dompurify_bypass_chain.html">Deep dive · The DOMPurify bypass chain &rarr;</a></span>
+</div>
+<div class="colophon"><h3>Colophon</h3><p>Citations: [R7], [R8]. <strong>Provenance:</strong> new for bob_mXSS, 2026-09-07; "dead / live" verdicts cross-checked against Chrome 148 (Modules 3, 5, 6).</p></div>
+
+</div>
+</body>
+</html>
