@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 11 — The Native Sanitizer API: Does the Platform Fix Hold?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 3 · Module 11 of 11 · Frontier · Course capstone</p>
+  <h1>The Native Sanitizer API<em>does the platform fix hold?</em></h1>
+  <p class="thesis"><code>Element.setHTML()</code> ships in Chrome 148. It is
+  <b>mutation-safe by construction</b>: one parse, filter the tree, insert. No serialize
+  step means no second parse for a sink-differential to exploit. Every course vector, run
+  through the real API &mdash; nothing fires.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>The entire mutation-XSS class comes from <span class="hi">parse &rarr; serialize &rarr;
+    parse</span>. Remove the middle step &mdash; hand the caller a tree, never a string
+    &mdash; and the class has nowhere to live. <code>setHTML()</code> does exactly that.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../09-parser-differentials/tutorial.html">Module 9 · The sink zoo</a>
+    <a class="tag" href="../../track2-mxss/08-hardened-sanitizer/tutorial.html">Module 8 · Hardened sanitizer</a>
+    <a class="tag" href="../../../bob_CSP_trusted_types/track2-trusted-types/17_default_policy/tutorial.html">CSP&amp;TT · default policy (imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>For years, Kofi's process was: open the crate, check it, <em>nail it shut again</em>,
+    and send the sealed crate on. Every problem in this course came from that last step
+    &mdash; the crate being re-opened downstream by someone with a different rulebook.</p>
+    <p>The new process: Kofi opens the crate, checks it, and <strong>wheels the contents
+    straight onto the shop floor himself, on an open pallet</strong>. There is no crate to
+    re-open, no manifest to re-read, no downstream officer with a different rulebook. What he
+    checked is what goes on the shelf, exactly. The failure mode is gone because the step
+    that caused it is gone.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <p><code>element.setHTML(str, { sanitizer })</code>:</p>
+    <ol>
+      <li>Parse <code>str</code> as a fragment, context = <code>element</code>, scripting
+      <strong>disabled during the parse</strong> (so <code>&lt;script&gt;</code> never runs,
+      even transiently) &mdash; but the <code>&lt;noscript&gt;</code> content model matches
+      the live document, closing Module 4.</li>
+      <li>Walk the resulting tree against the sanitizer config (an allow/block list of
+      elements and attributes; a built-in default that drops all script-capable surface).</li>
+      <li><strong>Insert the filtered nodes into <code>element</code>.</strong> No
+      serialization. The tree that was filtered is the tree that is now live.</li>
+    </ol>
+    <p>Compare Track 2: parse &rarr; filter &rarr; <em>serialize to a string</em> &rarr; the
+    app assigns that string to <code>innerHTML</code> &rarr; <em>the browser parses it
+    again</em>. Steps 3&ndash;5 are where every mutation in this course happens.
+    <code>setHTML</code> has no steps 3&ndash;5.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="oracle">
+    <pre>Chrome 148 — every course vector through the real Element.setHTML():
+
+  M3 rawtext title     -> &lt;title&gt;&amp;lt;img ...&amp;gt;&lt;/title&gt;   inert
+  M3 rawtext style     -> (empty)
+  M4 noscript attr     -> (empty)
+  M5 form double-nest  -> (empty)
+  M5 mtext/mglyph/style-> &lt;math&gt;&lt;mtext&gt;&lt;/mtext&gt;&lt;/math&gt;
+  M5 image alias       -> &lt;svg&gt;&lt;/svg&gt;
+  M5 svg/p breakout    -> &lt;svg&gt;&lt;/svg&gt;&lt;p&gt;"&amp;gt;&lt;/p&gt;
+  M7 template          -> (empty)
+
+  handlers that fired: [ ]</pre>
+    <p>Run <a href="proof.html">proof.html</a> yourself.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <pre><code><span class="c">// the shape, modelled — src/native.mjs</span>
+export function setHTMLModel(html, safe) {
+  const tree = parseFragment(html, 'div', { scripting: true });   <span class="y">// ONE parse</span>
+  filterInPlace(tree, safe);                                       <span class="y">// filter the TREE</span>
+  return tree;                                                     <span class="y">// insert as-is — NO serialize</span>
+}</code></pre>
+  <p>The two escape hatches, and their real risk:</p>
+  <pre><code>element.setHTMLUnsafe(str)      <span class="c">// parses (no script exec), does NOT filter</span>
+Document.parseHTMLUnsafe(str)   <span class="c">// same, at document level</span>
+<span class="c">// still single-parse → still mXSS-immune. residual risk is a plain</span>
+<span class="c">// &lt;img onerror&gt; the caller forgot to handle — an ordinary DOM-XSS, not a mutation.</span></code></pre>
+  <p>Rationale: <a href="DECISIONS.md">DECISIONS.md</a>.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits / What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant"><h4>Can't do yet (or ever, with setHTML)</h4><ul>
+      <li>Mount a mutation-XSS attack &mdash; there is no round trip</li>
+      <li>Rely on it in every browser today &mdash; Safari support lags; ship a polyfill/DOMPurify fallback</li>
+      <li>Use <code>setHTMLUnsafe</code> and skip thinking &mdash; it doesn't sanitize</li>
+    </ul></div>
+    <div class="can"><h4>Can do</h4><ul>
+      <li>Verify all 12 course vectors are inert through the real API</li>
+      <li>Explain <em>why</em> it's immune, not just <em>that</em> it is: no serialize step</li>
+      <li>Locate sanitisation correctly &mdash; it's one layer; CSP + Trusted Types are the others</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track3-frontier\11-native-sanitizer-api
+node test\demo.mjs
+<span class="c"># then open proof.html in Chrome/Edge — every row inert, "handlers that fired: []"</span></code></pre>
+    <span class="lab">Expected output (tail)</span>
+    <pre><code>  PASS  setHTML model is clean for: M7 nested template
+  PASS  benign markup survives setHTML model
+  PASS  the KEY property: no serialize step means no second parse
+  PASS  setHTMLUnsafe does NOT sanitize — a plain &lt;img onerror&gt; survives
+  PASS  setHTMLUnsafe is still mutation-safe: it is a single parse, no round trip
+
+  16 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch"><span class="ct">Getting a blank or broken result?</span>
+  <p><strong>proof.html says "not supported"</strong> &mdash; you're on Safari or an old
+  build. The Node test still runs (it models the shape). <strong>A row fires</strong> &mdash;
+  that would be a browser bug worth reporting; re-test in a clean profile first.</p></div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>If <code>setHTML()</code> ends the mutation-XSS class, is the rest of this course
+    now obsolete?</summary>
+    <p><strong>No &mdash; for three reasons.</strong> (1) <b>Deployment reality:</b> billions of
+    lines of existing code use <code>innerHTML</code> + DOMPurify and will for a decade;
+    understanding <em>their</em> failure mode is the job. (2) <b>The API has a config surface:</b>
+    <code>setHTML({ sanitizer: { elements: [...] } })</code> &mdash; allow-list
+    <code>&lt;style&gt;</code> or <code>&lt;svg&gt;</code> and you've re-opened Modules 3 and 5
+    <em>inside</em> the safe API, because now its filtered tree contains a mutating element that
+    a later <code>.innerHTML</code> read of that subtree would serialize. (3) <b>It's one
+    layer:</b> a bug in the sanitizer config, a <code>setHTMLUnsafe</code> call, a
+    non-<code>setHTML</code> sink somewhere in a dependency &mdash; and you're relying on
+    Trusted Types and CSP to catch it. Sanitising is the last line, never the only one. That
+    hand-off is where this course ends and <code>bob_CSP_trusted_types</code> begins.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: Does DOMPurify become pointless?</div>
+    <div class="a">A: It gains a native fast path and stays as the cross-browser fallback and
+    the richer-config option. cure53 has said as much. For new code targeting modern
+    browsers, <code>setHTML()</code> first, DOMPurify fallback.</div></div>
+    <div class="qa-item"><div class="q">Q: Why does the default <code>setHTML()</code> keep <code>&lt;title&gt;</code> but empty its content?</div>
+    <div class="a">A: The default allow-list includes <code>&lt;title&gt;</code> as a structural
+    element but drops disallowed <em>children</em>; and since its content model is RCDATA,
+    what remains serialises escaped. Net effect: inert. You saw it in the state map.</div></div>
+    <div class="qa-item"><div class="q">Q: Is <code>Sanitizer</code> (the object) the same as <code>setHTML</code>?</div>
+    <div class="a">A: <code>Sanitizer</code> is the reusable config object you can pass to
+    <code>setHTML</code> (and <code>parseHTML</code>). <code>setHTML</code> is the sink that
+    applies it. The config is where you can help or hurt yourself &mdash; see the brain
+    exercise.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next &mdash; the end of the course</h2></div>
+  <p>You built an HTML engine, a serializer, and a sanitizer; broke the sanitizer five ways;
+  fixed it; and saw the platform remove the failure mode at its root. Two things remain, and
+  they are not in this course:</p>
+  <ul>
+    <li><a href="../../lessons/01_history-of-mxss/01_explainer.html">The history lesson</a>
+    &mdash; Heiderich 2013 to the Sanitizer API, so you can place any disclosure on the timeline.</li>
+    <li><a href="../../../bob_CSP_trusted_types/prerequisites/index.html">bob_CSP_trusted_types</a> &mdash;
+    the layers <em>above</em> sanitising: Trusted Types makes an unguarded
+    <code>innerHTML</code> a runtime error; CSP stops the payload executing even if a mutation
+    slips through. Sanitising is the last line. That course is the others.</li>
+  </ul>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../10-reading-disclosures/tutorial.html">Module 10 · Reading disclosures</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../../lessons/01_history-of-mxss/01_explainer.html">Lesson · A history of mXSS &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/native.mjs</code>, <code>proof.html</code>. Rationale:
+  <a href="DECISIONS.md">DECISIONS.md</a>. Citations: <a href="../../REFERENCES.md">REFERENCES.md</a>
+  [R6], [S3].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. Every course vector run
+  through the real <code>Element.setHTML()</code> in Chrome 148 &mdash; zero handlers fired.</p>
+</div>
+
+</div>
+</body>
+</html>

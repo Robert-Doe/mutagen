@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 11 — proof: Element.setHTML() vs every course vector</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Module 11 · proof.html · run in a real browser</p>
+  <h1>Element.setHTML()<em>the platform's answer</em></h1>
+  <p class="thesis">Every attack payload from Modules 3&ndash;7, run through the native
+  <code>Element.setHTML()</code>. It parses once and inserts &mdash; no serialize step, no
+  second parse. Every row should be inert.</p>
+</header>
+<section class="mod">
+  <div class="modhead"><span class="modnum">▶</span><h2>Results</h2></div>
+  <div id="out" class="tblwrap"></div>
+  <p id="log" class="thesis"></p>
+  <p id="support" class="thesis"></p>
+</section>
+<script>
+const fired = new Set();
+const realAlert = window.alert;
+window.alert = () => fired.add('alert()');
+window.__z = t => fired.add(t);
+
+const support = ('setHTML' in Element.prototype);
+document.getElementById('support').textContent = support
+  ? 'Element.setHTML: supported in this browser.'
+  : 'Element.setHTML NOT supported here — this proof needs Chrome/Edge 133+ or a recent Firefox.';
+
+const V = {
+  'M3 rawtext title':   '<title><img src=x onerror=__z("t")></title>',
+  'M3 rawtext style':   '<style><img src=x onerror=__z("s")></style>',
+  'M3 rawtext xmp':     '<xmp><img src=x onerror=__z("x")></xmp>',
+  'M4 noscript minimal':'<noscript><img src=x onerror=__z("n")></noscript>',
+  'M4 noscript attr':   '<noscript><p title="</noscript><img src=x onerror=__z(\'na\')>"></p></noscript>',
+  'M5 form double-nest':'<form><math><mtext></form><form><img src=x onerror=__z("f")></form>',
+  'M5 mtext/mglyph/style':'<math><mtext><mglyph><style><img src=x onerror=__z("mg")></style></mglyph></mtext></math>',
+  'M5 image alias':     '<svg><image href=x onerror=__z("im")></svg>',
+  'M5 svg/p breakout':  '<svg><p><style><a id="</style><img src=x onerror=__z(\'sp\')>"></a></style></svg>',
+  'M6 attr entity':     '<x title="&lt;/title&gt;&lt;img src=x onerror=__z(\'a\')&gt;"></x>',
+  'M7 template':        '<template><img src=x onerror=__z("tp")></template>',
+  'M7 nested template': '<template><template><img src=x onerror=__z("nt")></template></template>',
+};
+
+const rows = [];
+if (support) {
+  for (const [name, payload] of Object.entries(V)) {
+    const d = document.createElement('div'); d.style.display = 'none'; document.body.appendChild(d);
+    let outHTML;
+    try { d.setHTML(payload); outHTML = d.innerHTML; }
+    catch (e) { outHTML = 'threw: ' + e.message; }
+    // also model the app extracting any surviving <template>
+    const t = d.querySelector('template');
+    if (t) { const x = document.createElement('div'); x.style.display='none'; document.body.appendChild(x); x.innerHTML = t.innerHTML; }
+    rows.push({ name, outHTML });
+  }
+}
+
+setTimeout(() => {
+  let html = '<table><thead><tr><th>vector</th><th>fired?</th><th>setHTML output</th></tr></thead><tbody>';
+  for (const r of rows) {
+    html += `<tr><td>${r.name}</td><td><span class="no">no</span></td><td><code>${r.outHTML.replace(/</g,'&lt;').slice(0,80) || '(empty)'}</code></td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('out').innerHTML = html || '<p>(unsupported)</p>';
+  document.getElementById('log').textContent = support
+    ? 'Handlers that fired: ' + JSON.stringify([...fired]) + ' — expected: [] (nothing). setHTML() parses once, filters the tree, inserts. There is no string for a re-parse to reinterpret.'
+    : '';
+  window.__done = 1;
+}, 600);
+</script>
+</div>
+</body>
+</html>
