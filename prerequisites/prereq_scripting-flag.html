@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Scripting Flag — Prerequisite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Prerequisite 2 of 10 · new for this course</p>
+  <h1>The Scripting Flag<em>one boolean, two trees</em></h1>
+  <p class="thesis">The second prerequisite the sibling courses never needed.
+  <b>Module 4 &mdash; the Google Search 2019 bug &mdash; is entirely this one idea.</b></p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">☞</span><h2>Sekondi</h2></div>
+  <div class="sekondi">
+    <p>The customs rulebook at Sekondi has a clause that reads differently depending on
+    whether the harbour generator is running. Power <strong>on</strong>: a drum marked
+    "backup fuel &mdash; ignore unless power fails" is sealed and set aside unopened; the
+    whole label and contents are one inert lump. Power <strong>off</strong>: that same drum
+    is opened and its contents sorted item by item.</p>
+    <p>Kofi checks crates at the shed, where the generator is usually <em>off</em>, so he
+    opens the drum. The ship's inspector checked the same crate at sea with the power
+    <em>on</em>, so she left it sealed. Two competent inspectors, one rulebook, one crate
+    &mdash; and a completely different decision about what is inside it. The element that
+    behaves this way is <code>&lt;noscript&gt;</code>.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>What the flag is</h2></div>
+  <div class="spec">
+    <p>The HTML parsing algorithm takes an input the standard calls the <strong>scripting
+    flag</strong>. It is <em>enabled</em> or <em>disabled</em>, fixed for the whole parse. It
+    affects the tree in exactly one place: the content model of <code>&lt;noscript&gt;</code>.</p>
+  </div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Scripting flag</th><th>How <code>&lt;noscript&gt;</code> content is parsed</th></tr></thead>
+    <tbody>
+      <tr><td><strong>enabled</strong></td><td>RAWTEXT &mdash; everything up to <code>&lt;/noscript&gt;</code> is one text node. No tags, no entities.</td></tr>
+      <tr><td><strong>disabled</strong></td><td>Normal &mdash; the content is parsed as ordinary markup, elements and all.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The logic is reasonable in isolation. <code>&lt;noscript&gt;</code> holds fallback content
+  shown only when scripting is off. If scripting is on the browser will never render it &mdash;
+  so don't build a DOM for it, treat it as text. If scripting is off, it's about to be shown,
+  so build the real DOM.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>Who sets it to what</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Environment</th><th>Flag</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>A real browser rendering a page</td><td><strong>enabled</strong></td><td>JavaScript runs there.</td></tr>
+      <tr><td><code>element.innerHTML = &hellip;</code> in a live page</td><td><strong>enabled</strong></td><td>Same document, scripting on.</td></tr>
+      <tr><td><code>new DOMParser().parseFromString(&hellip;, 'text/html')</code></td><td><strong>disabled</strong></td><td>The result is inert &mdash; scripts never run in it.</td></tr>
+      <tr><td><code>&lt;template&gt;</code> content</td><td><strong>disabled</strong></td><td>Template content is inert by design.</td></tr>
+      <tr><td>jsdom / a server-side DOM in Node</td><td><strong>disabled</strong> (default)</td><td>No scripting environment unless you opt in.</td></tr>
+      <tr><td>DOMPurify running server-side on jsdom</td><td><strong>disabled</strong></td><td>Inherits jsdom's default.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout crazy">
+    <span class="ct">There is the whole bug</span>
+    <p>A sanitizer very often runs with the scripting flag <strong>disabled</strong> &mdash;
+    server-side on jsdom, or client-side via <code>DOMParser</code> / <code>&lt;template&gt;</code>.
+    The browser that finally renders the sanitized output has it <strong>enabled</strong>. Feed
+    <code>&lt;noscript&gt;</code> content that is inert markup under one flag and live markup
+    under the other, and the sanitizer inspects a different tree from the one that runs.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>Seeing it happen</h2></div>
+  <div class="oracle">
+    <pre>input  =  &lt;noscript&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/noscript&gt;
+
+scripting DISABLED   (new DOMParser().parseFromString(..., 'text/html'))
+  noscript.childNodes   ->  [ &lt;IMG&gt; ]              a real element
+  noscript.innerHTML    ->  '&lt;img src="x" onerror="alert(1)"&gt;'
+
+scripting ENABLED    (div.innerHTML = input, in a live document)
+  noscript.childNodes   ->  [ #text ]               just text
+  noscript.firstChild.nodeValue  ->  '&lt;img src=x onerror=alert(1)&gt;'</pre>
+    <p>Same seven-word string. One parse contains an image element with an event handler; the
+    other contains the characters of that string and nothing else. Our engine's
+    <code>parseFragment(html, 'body', {scripting})</code> reproduces both.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>Why the minimal case above is <em>not yet</em> the exploit</h2></div>
+  <p>In that exact example a competent sanitizer running with scripting disabled <em>sees</em>
+  the <code>&lt;img onerror&gt;</code> and strips the handler &mdash; so its output is safe. The
+  real <code>&lt;noscript&gt;</code> attacks smuggle the payload somewhere the disabled-flag
+  parser reads as an inert <strong>attribute value</strong> (so the sanitizer waves it
+  through) while the enabled-flag parser, treating the whole block as RAWTEXT, sees a
+  <code>&lt;/noscript&gt;</code> that ends the text early and live tags after it. That is
+  Module 4 &mdash; tested against the browser you actually have, because browsers have patched
+  specific vectors over the years.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="prereq_namespaces.html">Namespaces</a></span>
+  <span class="next"><span class="dir">Next</span><a href="prerequisites.html">Back to prerequisites map &rarr;</a></span>
+</div>
+
+<div class="provenance">
+  <strong>Provenance:</strong> new for bob_mXSS, written 2026-09-07. The "We ran this" box was
+  produced by <code>DOMParser</code> and a live <code>div.innerHTML</code> in Chrome 148 on
+  that date, then reproduced by <code>engine/mxss-lab/lab.mjs</code>.
+</div>
+
+</div>
+</body>
+</html>

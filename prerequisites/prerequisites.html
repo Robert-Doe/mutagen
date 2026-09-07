@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prerequisites — Mutation XSS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Prerequisites</p>
+  <h1>Ten Ideas<em>Every Module Assumes</em></h1>
+  <p class="thesis">Mutation XSS lives at the seam between four machines: the
+  <b>tokenizer</b>, the <b>tree builder</b>, the <b>serializer</b>, and the <b>sanitizer</b>.
+  You don't need to build all four from memory &mdash; you need a correct model of each. This
+  page is the map.</p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">☞</span><h2>Sekondi</h2></div>
+  <div class="sekondi">
+    <p>Picture the customs shed at Sekondi harbour where Kofi works Saturdays. A crate
+    arrives. Someone has to <em>read the manifest</em> (tokenizer: turn a stream of characters
+    into a list of labelled items), <em>lay the goods out on the table in the right
+    groupings</em> (tree builder: turn that flat list into a nested structure), <em>write a
+    fresh manifest</em> when the crate is repacked (serializer), and <em>check every item
+    against the allowed list</em> (sanitizer). Four jobs, four rulebooks. Mutation XSS is a
+    disagreement between those rulebooks that a smuggler can stand in.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>Written in full, here</h2></div>
+
+  <h3><a href="prereq_namespaces.html">1 &mdash; Namespaces: HTML, SVG, MathML</a></h3>
+  <p>The same tag name means different things depending on which <em>namespace</em> the
+  parser is in. <code>&lt;style&gt;</code> inside <code>&lt;svg&gt;</code> does not start CSS
+  rawtext the way it does in HTML. The parser switches namespace at <code>&lt;svg&gt;</code>/<code>&lt;math&gt;</code>
+  and back at "integration points". Modules 1 and 5 are built on this. <strong>Read before Module 1.</strong></p>
+
+  <h3><a href="prereq_scripting-flag.html">2 &mdash; The Scripting Flag</a></h3>
+  <p>A boolean input to the parser that changes how <code>&lt;noscript&gt;</code> is parsed:
+  scripting on &rarr; raw text; scripting off &rarr; normal markup. A browser has it on; a
+  server-side sanitizer has it off. Same string, two trees. Module 4 is this bug.
+  <strong>Read before Module 4.</strong></p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>The one-paragraph version (deep link for the rest)</h2></div>
+
+  <h3>3 &mdash; The DOM node shape</h3>
+  <p>A parsed document is a tree of <em>nodes</em>: a <strong>Document</strong> /
+  <strong>DocumentFragment</strong> root; <strong>Element</strong> nodes (tag name, attribute
+  map, ordered children); <strong>Text</strong> nodes; <strong>Comment</strong> nodes. An
+  element's <em>parent</em> and its ordered <em>children</em> are the only structure there is.
+  mXSS is almost always "a node ended up with a different parent than the source markup
+  implied."
+  <div class="prereqs"><span class="lbl">Deep</span>
+    <a class="tag" href="../../bob_foster_parenting/prerequisites/prereq_dom_node_shape.html">Foster Parenting &rarr; DOM node shape</a></div></p>
+
+  <h3>4 &mdash; Parsing vs. serialization: two directions, two rulebooks</h3>
+  <p><strong>Parsing</strong> is string &rarr; tree. <strong>Serialization</strong> is tree
+  &rarr; string &mdash; what you get reading <code>element.innerHTML</code>. Separate
+  algorithms in the standard (&sect;13.2 and &sect;13.3), never designed as exact inverses.
+  The gap between them is where this whole course lives. Module 2 builds the serializer and
+  shows the gap.</p>
+
+  <h3>5 &mdash; Tokens and tokenizer states</h3>
+  <p>Before the tree there is a flat list of <em>tokens</em>: start-tag, end-tag, character,
+  comment, DOCTYPE. The tokenizer is a state machine: in "data" state a <code>&lt;</code>
+  begins a tag; in "RAWTEXT" state (inside <code>&lt;style&gt;</code>, <code>&lt;script&gt;</code>,
+  <code>&lt;xmp&gt;</code>) a <code>&lt;</code> is just a character and only the matching close
+  tag ends the block. "Which state am I in?" has no answer without context &mdash; the seam
+  Module 3 exploits.
+  <div class="prereqs"><span class="lbl">Deep</span>
+    <a class="tag" href="../../bob_browser_tokenization/prerequisites/finite-state-machines.html">Tokenization &rarr; finite state machines</a>
+    <a class="tag" href="../../bob_browser_tokenization/modules/05-rcdata-rawtext/tutorial.html">Tokenization &rarr; Module 5</a></div></p>
+
+  <h3>6 &mdash; Content models: normal, void, rawtext, RCDATA, foreign</h3>
+  <p>Every element has a <em>content model</em> deciding how its children parse.
+  <strong>Normal</strong>: markup. <strong>Void</strong> (<code>&lt;img&gt;</code>): no
+  children. <strong>RAWTEXT</strong> (<code>&lt;style&gt;</code>, <code>&lt;script&gt;</code>):
+  literal text, no entities, no tags. <strong>RCDATA</strong> (<code>&lt;title&gt;</code>,
+  <code>&lt;textarea&gt;</code>): literal text but entities decode. <strong>Foreign</strong>
+  (inside <code>&lt;svg&gt;</code>/<code>&lt;math&gt;</code>): different again. Move a subtree
+  from a rawtext parent to a normal parent and its "text" is suddenly markup. Module 3.</p>
+
+  <h3>7 &mdash; Character references (entities)</h3>
+  <p><code>&amp;lt;</code>, <code>&amp;#60;</code>, <code>&amp;#x3c;</code> all decode to
+  <code>&lt;</code>. <em>When</em> they decode is contextual: in attribute values and RCDATA
+  text, yes; in RAWTEXT and comments, no. A serializer that writes <code>&amp;lt;</code> into
+  a place the next parse will decode has handed the attacker a <code>&lt;</code>. Module 6.
+  <div class="prereqs"><span class="lbl">Deep</span>
+    <a class="tag" href="../../bob_browser_tokenization/modules/04-char-ref/tutorial.html">Tokenization &rarr; Module 4</a></div></p>
+
+  <h3>8 &mdash; The stack of open elements &amp; insertion modes</h3>
+  <p>The tree builder keeps a <em>stack</em> of elements it is currently inside and an
+  <em>insertion mode</em> ("in body", "in table", "in template"&hellip;). "In table" mode
+  <em>foster-parents</em> non-table content &mdash; relocates it to just before the table.
+  A legal, spec-mandated mutation. The Foster Parenting course is entirely about it.
+  <div class="prereqs"><span class="lbl">Deep</span>
+    <a class="tag" href="../../bob_foster_parenting/prerequisites/prereq_stack_of_open_elements.html">Foster Parenting &rarr; stack of open elements</a>
+    <a class="tag" href="../../bob_foster_parenting/prerequisites/prereq_insertion_modes.html">&rarr; insertion modes</a></div></p>
+
+  <h3>9 &mdash; Idempotency and fixed points</h3>
+  <p><code>f</code> is <em>idempotent</em> if <code>f(f(x)) = f(x)</code> for every
+  <code>x</code>. HTML parse&sbquo;serialize is <em>not</em>. A sanitizer whose
+  parse&sbquo;serialize step is not idempotent must be run <em>in a loop</em> until its output
+  stops changing, or the browser's final parse can differ from the tree it approved. Module 2,
+  and the fix in Module 8.
+  <div class="prereqs"><span class="lbl">Deep</span>
+    <a class="tag" href="../../bob_foster_parenting/track2-mxss/04_idempotent_serialization/tutorial.html">Foster Parenting &rarr; T2-04</a></div></p>
+
+  <h3>10 &mdash; What "XSS" and "a payload" mean</h3>
+  <p><strong>XSS</strong>: attacker-controlled JavaScript runs in the victim's page with the
+  victim's privileges. A <strong>payload</strong> is the minimal markup that shows it &mdash;
+  here almost always <code>&lt;img src=x onerror=alert(1)&gt;</code>: broken image &rarr;
+  <code>onerror</code> fires &rarr; <code>alert(1)</code> runs. Alert box appears &rarr; script
+  ran. That is the entire test.
+  <div class="prereqs"><span class="lbl">Deep</span>
+    <a class="tag" href="../../bob_CSP_trusted_types/prerequisites/02_dom_sinks.html">CSP &amp; Trusted Types &rarr; DOM sinks</a></div></p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../index.html">Course home</a></span>
+  <span class="next"><span class="dir">Next</span><a href="prereq_namespaces.html">Namespaces &rarr;</a></span>
+</div>
+
+<div class="provenance">
+  <strong>Provenance:</strong> this hub is new for bob_mXSS. Deep links marked <em>Deep</em>
+  point into the three sibling courses in <code>RecentInnerDesktop/</code> and open in that
+  course's own visual style &mdash; intentionally, so you know you have stepped into imported
+  material.
+</div>
+
+</div>
+</body>
+</html>

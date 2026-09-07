@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Namespaces: HTML, SVG, MathML — Prerequisite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Prerequisite 1 of 10 · new for this course</p>
+  <h1>Namespaces<em>HTML, SVG, MathML</em></h1>
+  <p class="thesis">One of the two prerequisites the sibling courses never needed.
+  <b>Modules 1 and 5 are built entirely on it.</b> Read it once, carefully; it is short.</p>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">☞</span><h2>Sekondi</h2></div>
+  <div class="sekondi">
+    <p>The customs shed at Sekondi harbour has two halls. The <strong>General Goods hall</strong>
+    runs on the ordinary rulebook Kofi knows by heart. Cargo for the <strong>fishing
+    co-operative</strong> is checked in a separate hall, under the co-op's own rulebook
+    &mdash; different forms, different allowed-list, different idea of what counts as
+    contraband. A drum of a certain chemical can be perfectly legal in the fishing hall
+    (it preserves nets) and flatly banned in General Goods.</p>
+    <p>Here is the trap. A crate can be checked in the fishing hall, passed, resealed &mdash;
+    and then, further down the dock, <em>re-sorted into the General Goods stream</em> because
+    of how it was stacked. Now it is being judged by the other rulebook, and the officer who
+    passed it never applied that one. That re-sort is a <strong>namespace boundary</strong>,
+    and standing in it is how mutation XSS works.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>What a namespace is</h2></div>
+  <p>An HTML document can contain three different <em>vocabularies</em> of elements, each with
+  its own identifier called a <strong>namespace URI</strong>:</p>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Vocabulary</th><th>Namespace URI</th><th>Entered by</th></tr></thead>
+    <tbody>
+      <tr><td>HTML (the default)</td><td><code>http://www.w3.org/1999/xhtml</code></td><td>&mdash; you start here</td></tr>
+      <tr><td>SVG</td><td><code>http://www.w3.org/2000/svg</code></td><td>an <code>&lt;svg&gt;</code> start tag</td></tr>
+      <tr><td>MathML</td><td><code>http://www.w3.org/1998/Math/MathML</code></td><td>a <code>&lt;math&gt;</code> start tag</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Every element node carries its namespace for life. In JavaScript you read it as
+  <code>el.namespaceURI</code> and create one with <code>document.createElementNS(ns, name)</code>.
+  The parser assigns it automatically based on where the tag appeared.</p>
+
+  <div class="callout watch">
+    <span class="ct">Why it matters for security</span>
+    <p>A sanitizer's allowed-list is usually written for HTML element <em>names</em>: "allow
+    <code>&lt;a&gt;</code>, <code>&lt;b&gt;</code>, <code>&lt;title&gt;</code>." But
+    <code>&lt;a&gt;</code> in the SVG namespace is a <em>different element</em> from
+    <code>&lt;a&gt;</code> in HTML, and SVG <code>&lt;title&gt;</code> behaves nothing like
+    HTML <code>&lt;title&gt;</code>. A check that looks at the tag name and not the tag
+    namespace is checking the wrong thing.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>"Foreign content" mode changes the rules</h2></div>
+  <div class="spec">
+    <p>The moment the tree builder processes <code>&lt;svg&gt;</code> or <code>&lt;math&gt;</code>
+    it enters a mode the standard calls <strong>foreign content</strong>. Inside it, several
+    HTML behaviours you rely on switch <em>off</em>:</p>
+    <ul>
+      <li><strong>No RAWTEXT / RCDATA.</strong> In HTML, <code>&lt;style&gt;</code>,
+      <code>&lt;script&gt;</code>, <code>&lt;title&gt;</code>, <code>&lt;textarea&gt;</code>
+      make the tokenizer treat everything up to the close tag as plain text. Inside
+      <code>&lt;svg&gt;</code>/<code>&lt;math&gt;</code>, <em>they do not</em> &mdash; the
+      content is parsed as ordinary elements.</li>
+      <li><strong>Self-closing works.</strong> <code>&lt;circle/&gt;</code> really closes.</li>
+      <li><strong>CDATA sections are allowed.</strong> <code>&lt;![CDATA[ &hellip; ]]&gt;</code>
+      becomes text. In HTML it becomes a bogus comment.</li>
+      <li><strong>Some names are case-corrected:</strong> <code>viewbox</code>&rarr;<code>viewBox</code>,
+      <code>foreignobject</code>&rarr;<code>foreignObject</code>.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>Getting back out: integration points and breakout tags</h2></div>
+
+  <h3>Integration points &mdash; a deliberate door back to HTML</h3>
+  <div class="spec">
+    <p>Certain foreign elements are declared <strong>HTML integration points</strong> or
+    <strong>text integration points</strong>: their <em>content</em> parses under HTML rules
+    even though the element itself is foreign.</p>
+    <ul>
+      <li><strong>SVG:</strong> <code>&lt;foreignObject&gt;</code>, <code>&lt;desc&gt;</code>, <code>&lt;title&gt;</code></li>
+      <li><strong>MathML text integration points:</strong> <code>&lt;mi&gt;</code>, <code>&lt;mo&gt;</code>, <code>&lt;mn&gt;</code>, <code>&lt;ms&gt;</code>, <code>&lt;mtext&gt;</code></li>
+      <li><strong>MathML:</strong> <code>&lt;annotation-xml&gt;</code> with <code>encoding="text/html"</code> or <code>"application/xhtml+xml"</code></li>
+    </ul>
+  </div>
+
+  <h3>Breakout tags &mdash; an accidental ejection</h3>
+  <div class="spec">
+    <p>If the parser is in foreign content and sees the start tag of a common <em>HTML</em>
+    element &mdash; <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;p&gt;</code>,
+    <code>&lt;br&gt;</code>, <code>&lt;img&gt;</code>, <code>&lt;table&gt;</code>,
+    <code>&lt;div&gt;</code>, headings, list items&hellip; <span class="stamp">PARSE ERROR</span>
+    it <strong>pops every foreign element off the stack</strong> until it is back in HTML, then
+    processes the tag normally. So <code>&lt;svg&gt;&lt;p&gt;</code> does not give an SVG
+    paragraph; it ends the <code>&lt;svg&gt;</code> and starts an HTML <code>&lt;p&gt;</code>
+    as a sibling.</p>
+  </div>
+
+  <div class="oracle">
+    <pre>new DOMParser().parseFromString(html, 'text/html')
+
+html = '&lt;a&gt;&lt;/a&gt;&lt;svg&gt;&lt;a&gt;&lt;/a&gt;&lt;/svg&gt;'
+  first &lt;a&gt;  .namespaceURI  ->  http://www.w3.org/1999/xhtml   (HTML)
+  svg &gt; a     .namespaceURI  ->  http://www.w3.org/2000/svg     (SVG)
+
+html = '&lt;svg&gt;&lt;style&gt;abc&lt;def&gt;ghi&lt;/def&gt;&lt;/style&gt;&lt;/svg&gt;'
+  svg style .innerHTML  ->  "abc&lt;def&gt;ghi&lt;/def&gt;"    &lt;def&gt; is an ELEMENT, not text
+                                              (in HTML, &lt;style&gt; content is always text)
+
+html = '&lt;svg&gt;&lt;desc&gt;&lt;img src=x onerror=1&gt;&lt;/desc&gt;&lt;/svg&gt;'
+  desc .firstChild  ->  &lt;IMG&gt; element     &lt;desc&gt; is an HTML integration point
+
+html = '&lt;svg&gt;&lt;p&gt;hi&lt;/p&gt;&lt;/svg&gt;'
+  p .namespaceURI   ->  http://www.w3.org/1999/xhtml
+  p .parentElement  ->  BODY               &lt;p&gt; broke out of &lt;svg&gt; entirely</pre>
+    <p>Our from-scratch engine (<code>engine/mxss-lab/lab.mjs</code>) reproduces every one of
+    these; the smoke test that proves it is in Module 1.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>Why this is a mutation-XSS engine, in one line</h2></div>
+  <p>A sanitizer parses <code>&lt;svg&gt;&lt;style&gt;&hellip;&lt;/style&gt;&lt;/svg&gt;</code>,
+  sees the <code>&lt;style&gt;</code>'s children as harmless SVG elements, decides they are
+  fine, and serializes. When the browser re-parses that string <em>without</em> the
+  <code>&lt;svg&gt;</code> wrapper &mdash; because the sanitizer removed it, or the node was
+  moved &mdash; the same <code>&lt;style&gt;</code> is now an <em>HTML</em> <code>&lt;style&gt;</code>,
+  its children collapse into one text node, and the <code>&lt;</code> characters that were
+  safely inside a child element are raw text that the <em>next</em> parse reads as tags. The
+  officer in the fishing hall passed it. The General Goods rulebook was never applied.</p>
+
+  <div class="callout crazy">
+    <span class="ct">Reality check &mdash; many classic namespace payloads are now patched</span>
+    <p>Browsers changed serialization over the years to close these. The most-quoted payload
+    &mdash; <code>&lt;svg&gt;&lt;style&gt;&lt;a title="&lt;/style&gt;&lt;img src=x
+    onerror=alert(1)&gt;"&gt;</code> &mdash; <strong>does not round-trip in Chrome 148</strong>:
+    the attribute's <code>&lt;</code>/<code>&gt;</code> serialize as <code>&amp;lt;</code>/<code>&amp;gt;</code>
+    and stay inert. Module 5 shows which variants are still live, which are version-specific,
+    and which are history &mdash; each re-tested against the browser you have.</p>
+  </div>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="prerequisites.html">Prerequisites map</a></span>
+  <span class="next"><span class="dir">Next</span><a href="prereq_scripting-flag.html">The Scripting Flag &rarr;</a></span>
+</div>
+
+<div class="provenance">
+  <strong>Provenance:</strong> new for bob_mXSS, written 2026-09-07. Every result in the
+  "We ran this" box was produced by <code>DOMParser</code> in Chrome 148 (Claude in-app
+  browser) on that date, then reproduced by <code>engine/mxss-lab/lab.mjs</code>.
+</div>
+
+</div>
+</body>
+</html>
