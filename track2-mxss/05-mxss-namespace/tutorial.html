@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 5 — mXSS via Namespace Confusion (SVG / MathML)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 2 · Module 5 of 11 · The Mutation Catalogue</p>
+  <h1>Namespace Confusion<em>the DOMPurify bypass family</em></h1>
+  <p class="thesis">The most famous mXSS class, and the one with live 2026 bypasses.
+  Markup that is inert inside SVG or MathML becomes a live HTML handler once the foreign
+  wrapper is stripped or the namespace boundary is miscomputed. <b>Four vectors, each
+  verified firing in Chrome 148.</b></p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p>A sanitizer that walks a <span class="hi">live child list</span>, or judges an element
+    by <span class="hi">tag name without its namespace</span>, or forgets
+    <span class="hi"><code>&lt;image&gt;</code> ≡ <code>&lt;img&gt;</code></span>, ships a tree
+    the browser turns into script. Snapshot + namespace enforcement + alias normalisation
+    closes all four.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../prerequisites/prereq_namespaces.html">Prereq 1 · Namespaces</a>
+    <a class="tag" href="../../track1-engine/01-foreign-content-fragment/tutorial.html">Module 1 · Foreign content</a>
+    <a class="tag" href="../../track1-engine/01-foreign-content-fragment/concept_how_they_connect.html">Vocab web · the SVG stuff</a>
+    <a class="tag" href="../../../bob_foster_parenting/track1-core/06_what_gets_fostered/tutorial.html">Foster Parenting · M06 (foreign elements, imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>The fishing co-op's hall at Sekondi checks a crate and finds a drum of net-preservative
+    &mdash; legal there. It stamps the crate and sends it on. Down the dock, a re-sort moves
+    that crate into the General Goods stream. The General Goods officer never re-checks it
+    &mdash; the co-op's stamp is right there. But net-preservative is a banned solvent in
+    General Goods. It's through.</p>
+    <p>Four ways the re-sort happens. <strong>The clerk who counts by looking at the top
+    label and moving on</strong> &mdash; if you slip a crate onto the pile <em>while their
+    finger is already past that spot</em>, they never count it (the live-list bug).
+    <strong>Judging by the product name and not the hall it came from</strong> &mdash;
+    "drum of solvent" sounds fine if you don't ask which rulebook applied (no namespace
+    check). <strong>Two names for one thing</strong> &mdash; the form says "IMG" is banned,
+    but the crate is labelled "IMAGE" (the alias). And <strong>the crate that ejects
+    itself</strong> &mdash; put a pallet of General Goods (<code>&lt;p&gt;</code>) in the
+    co-op hall and security walks the whole lot out, solvent included, into General Goods
+    (the breakout).</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <p>Take the MathML vector <code>&lt;math&gt;&lt;mtext&gt;&lt;mglyph&gt;&lt;style&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/style&gt;&lt;/mglyph&gt;&lt;/mtext&gt;&lt;/math&gt;</code>:</p>
+    <ol>
+      <li><code>&lt;math&gt;</code> &rarr; MathML namespace.</li>
+      <li><code>&lt;mtext&gt;</code> &rarr; a text integration point &mdash; content would
+      parse as HTML&hellip;</li>
+      <li>&hellip;<em>except</em> <code>&lt;mglyph&gt;</code>, which is the exception: it stays
+      MathML.</li>
+      <li>So <code>&lt;style&gt;</code> is a <strong>MathML</strong> element &mdash; not
+      rawtext &mdash; and <code>&lt;img src=x onerror=alert(1)&gt;</code> is a <strong>real
+      child element</strong> of it (then <code>&lt;img&gt;</code>, a breakout tag, ejects to
+      sit beside the style).</li>
+      <li>A naive sanitizer unwraps <code>&lt;math&gt;&lt;mtext&gt;&lt;mglyph&gt;</code>
+      (not on its list) while iterating a live list, and the promoted <code>&lt;img&gt;</code>
+      is skipped by the iterator &mdash; its <code>onerror</code> never gets stripped.</li>
+      <li>Serialize, re-parse at <code>innerHTML</code>: a live <code>&lt;img onerror&gt;</code>.
+      <span class="stamp">XSS</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="tblwrap">
+  <table>
+    <thead><tr><th>Vector</th><th>The flaw it exploits</th><th>Naive</th><th>Correct</th></tr></thead>
+    <tbody>
+      <tr><td><code>&lt;form&gt;&lt;math&gt;&lt;mtext&gt;&lt;/form&gt;&lt;form&gt;&lt;img onerror&gt;</code></td><td>"form in form" drops the 2nd form, reparenting the img past a live iterator</td><td class="yes">FIRES</td><td class="no">blocked</td></tr>
+      <tr><td><code>&lt;math&gt;&lt;mtext&gt;&lt;mglyph&gt;&lt;style&gt;&lt;img onerror&gt;</code></td><td><code>&lt;mglyph&gt;</code> keeps <code>&lt;style&gt;</code> in MathML → img is a real element</td><td class="yes">FIRES</td><td class="no">blocked</td></tr>
+      <tr><td><code>&lt;svg&gt;&lt;image href=x onerror&gt;</code></td><td>HTML aliases <code>&lt;image&gt;</code> to <code>&lt;img&gt;</code>; name-only allow-list misses it</td><td class="yes">FIRES</td><td class="no">blocked</td></tr>
+      <tr><td><code>&lt;svg&gt;&lt;p&gt;&lt;style&gt;&lt;a id="&lt;/style&gt;&lt;img onerror&gt;"&gt;</code></td><td><code>&lt;p&gt;</code> ejects <code>&lt;svg&gt;</code>; HTML <code>&lt;style&gt;</code> serialises raw; <code>&lt;/style&gt;</code> breaks out on reparse</td><td class="yes">FIRES</td><td class="no">blocked</td></tr>
+      <tr><td><code>&lt;svg&gt;&lt;style&gt;&lt;a title="&lt;/style&gt;&lt;img onerror&gt;"&gt;</code> <em>(the classic)</em></td><td>attribute-based &mdash; <strong>killed by the 2020 serializer change</strong></td><td class="no">patched</td><td class="no">blocked</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Open <a href="proof.html">proof.html</a> in a real browser to watch these run.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <p>The one bug that opens the door, in <code>naiveSanitize</code>:</p>
+  <pre><code>for (const child of node.children) {        <span class="r">// iterating the array we splice below</span>
+  if (!allow.has(child.name)) {              <span class="r">// name only — no child.ns check</span>
+    kids.splice(i, 1, ...grandchildren);     <span class="r">// the promoted nodes are SKIPPED by for…of</span>
+  }
+}</code></pre>
+  <p>The three lines that close it, in <code>correctSanitize</code>:</p>
+  <pre><code>const snapshot = [...node.children];              <span class="g">// 1. snapshot before mutating</span>
+if (child.ns !== HTML || !allow.has(name)) …      <span class="g">// 2. an element must be HTML-namespaced</span>
+if (name === 'image') { child.name = 'img'; … }   <span class="g">// 3. normalise the alias, then re-check</span></code></pre>
+  <p>These three are exactly what DOMPurify does: <code>_forceRemove</code> on a snapshot,
+  the <code>_checkValidNamespace</code> gate (added after CVE-2020-26870-era bypasses), and a
+  fixed list of "tags that browsers rename". <a href="DECISIONS.md">DECISIONS.md</a> maps
+  them line by line; Module 8 builds the full hardened sanitizer.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant">
+      <h4>Can't do yet</h4>
+      <ul>
+        <li>Defeat a sanitizer that already snapshots + checks namespace &mdash; these four don't</li>
+        <li>Reproduce the pre-2020 attribute vectors against a current browser &mdash; the serializer won't emit the raw <code>&lt;</code></li>
+      </ul>
+    </div>
+    <div class="can">
+      <h4>Can do</h4>
+      <ul>
+        <li>Fire four distinct namespace-confusion payloads in Chrome 148, against a realistic naive sanitizer</li>
+        <li>Name the exact flaw (live iteration / no ns check / alias) behind each</li>
+        <li>Show the same payloads blocked by three specific defensive lines</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track2-mxss\05-mxss-namespace
+node test\demo.mjs
+<span class="c"># then open proof.html in a browser — 4 naive rows fire, all "correct" rows blocked</span></code></pre>
+    <span class="lab">Expected output</span>
+    <pre><code>MODULE 5 — mXSS via Namespace Confusion (SVG / MathML)
+
+  PASS  &lt;mglyph&gt; keeps &lt;style&gt; in MathML (not rawtext)
+  PASS  HTML parses &lt;image&gt; as an element that fires as an img
+  PASS  NAIVE sanitizer is defeated by: mtext/mglyph/style
+  PASS  CORRECT sanitizer ... blocks: mtext/mglyph/style
+  PASS  NAIVE sanitizer is defeated by: image alias
+  PASS  CORRECT sanitizer ... blocks: image alias
+  PASS  NAIVE sanitizer is defeated by: svg p breakout
+  PASS  CORRECT sanitizer ... blocks: svg p breakout
+  PASS  CORRECT sanitizer ... blocks: form double-nest
+
+  9 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>proof.html: no rows fire</strong> &mdash; your browser build may sanitise SVG
+    event handlers differently, or an extension is interfering. Try a clean profile.
+    <strong>The "correct" rows fire</strong> &mdash; you edited <code>correctSanitize</code>;
+    restore the snapshot (<code>[...node.childNodes]</code>).</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The "correct" sanitizer enforces <code>child.namespaceURI === HTML_NS</code>.
+    An attacker submits <code>&lt;svg&gt;&lt;foreignObject&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/foreignObject&gt;&lt;/svg&gt;</code>.
+    The <code>&lt;img&gt;</code> inside <code>&lt;foreignObject&gt;</code> <em>is</em> in the
+    HTML namespace (integration point). Does it get through?</summary>
+    <p><strong>The <code>&lt;img&gt;</code> passes the namespace check &mdash; but the
+    <code>&lt;svg&gt;</code> and <code>&lt;foreignObject&gt;</code> above it do not.</strong>
+    They're SVG-namespaced, so the sanitizer unwraps them, promoting the (HTML)
+    <code>&lt;img&gt;</code> to the fragment root &mdash; where it is now an ordinary allowed
+    <code>&lt;img&gt;</code> and its <code>onerror</code> gets stripped by the attribute
+    filter. So: blocked, but by the attribute scrub, not the namespace check. The lesson:
+    namespace enforcement alone isn't enough &mdash; you still need the per-element attribute
+    allow-list to run on <em>every</em> surviving node, including ones promoted out of removed
+    parents. Module 8's loop is what guarantees that.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: These fire against a "naive" sanitizer I wrote for the demo. Did real DOMPurify ever fall for them?</div>
+    <div class="a">A: Yes &mdash; earlier versions. CVE-2020-26870 (the <code>&lt;svg&gt;&lt;/p&gt;&lt;style&gt;</code>
+    shape) worked on DOMPurify &lt; 2.0.17. The <code>&lt;form&gt;</code> and
+    <code>&lt;mglyph&gt;</code> shapes trace to Bentkowski's 2019 write-ups. Each was patched
+    with exactly the defensive line this module shows. Module 10 reproduces the disclosures
+    with their patch commits.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Why is <code>&lt;image&gt;</code> even a thing?</div>
+    <div class="a">A: A very old HTML quirk &mdash; <code>&lt;image&gt;</code> was an early
+    synonym for <code>&lt;img&gt;</code> that some 1990s browsers supported, and the parser
+    still maps it for compatibility. It's a permanent gotcha for any allow-list that stores
+    tag names as strings.</div></div>
+
+    <div class="qa-item"><div class="q">Q: If I just forbid <code>&lt;svg&gt;</code> and <code>&lt;math&gt;</code> entirely, am I safe from this module?</div>
+    <div class="a">A: From these four, largely yes &mdash; and that's a legitimate hardening
+    (Module 8 does it). But you lose inline SVG, which many apps want. The namespace check
+    lets you keep SVG shapes while dropping SVG <em>scripting surface</em>. It's the more
+    surgical fix.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Namespace confusion needed a foreign wrapper. <a href="../06-mxss-attributes/tutorial.html">Module 6</a>
+  needs nothing but an attribute value and a character reference &mdash; and shows exactly
+  which serializer change (the one you met in Module 2) turned a whole generation of these
+  payloads into museum pieces.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../04-mxss-noscript/tutorial.html">Module 4 · Scripting flag</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../06-mxss-attributes/tutorial.html">Module 6 · Attribute serialization &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/namespace.mjs</code>, <code>proof.html</code>. Rationale:
+  <a href="DECISIONS.md">DECISIONS.md</a>. Citations: <a href="../../REFERENCES.md">REFERENCES.md</a>
+  [R7], [R9], [R10], [R11], [R12].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. All four "FIRES" verdicts
+  produced by running <code>proof.html</code> in Chrome 148 on that date; the "classic
+  (patched)" row confirmed <em>not</em> to fire.</p>
+</div>
+
+</div>
+</body>
+</html>

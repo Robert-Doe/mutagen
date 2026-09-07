@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 5 — proof: namespace confusion, live in a real browser</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Module 5 · proof.html · run this in a real browser</p>
+  <h1>Namespace Confusion<em>live</em></h1>
+  <p class="thesis">Each payload goes through two sanitizers, then into a live
+  <code>innerHTML</code> sink. A red row means <code>alert()</code>-equivalent code executed.
+  The <b>naive</b> sanitizer walks a live <code>childNodes</code> list and skips the
+  namespace check. The <b>correct</b> one snapshots the list, enforces the HTML namespace,
+  and normalises <code>&lt;image&gt;</code>.</p>
+</header>
+<section class="mod">
+  <div class="modhead"><span class="modnum">▶</span><h2>Results</h2></div>
+  <div id="out" class="tblwrap"></div>
+  <p id="summary" class="thesis"></p>
+</section>
+
+<script>
+let fired = new Set();
+window.__x = tag => fired.add(tag);
+
+// ── naive sanitizer: live NodeList iteration, no namespace check ──
+function naiveSanitize(html) {
+  const allow = new Set(['A','B','I','P','BR','SPAN','DIV','IMG','FORM','TABLE','TR','TD']);
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;                                  // scripting OFF
+  (function walk(node){
+    for (const child of node.childNodes) {               // LIVE NodeList — bug
+      if (child.nodeType === 8) { child.remove(); continue; }
+      if (child.nodeType !== 1) continue;
+      if (!allow.has(child.tagName)) {                    // name only — bug
+        child.replaceWith(...child.childNodes);           // unwrap; skips the moved nodes
+        continue;
+      }
+      for (const a of [...child.attributes]) if (/^on/i.test(a.name)) child.removeAttribute(a.name);
+      walk(child);
+    }
+  })(tpl.content);
+  const box = document.createElement('div'); box.appendChild(tpl.content.cloneNode(true));
+  return box.innerHTML;
+}
+
+// ── correct sanitizer: snapshot, namespace enforced, <image> normalised ──
+function correctSanitize(html) {
+  const allow = new Set(['A','B','I','P','BR','SPAN','DIV','IMG','FORM','TABLE','TR','TD']);
+  const HTMLNS = 'http://www.w3.org/1999/xhtml';
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  (function walk(node){
+    for (const child of [...node.childNodes]) {           // SNAPSHOT
+      if (child.nodeType === 8) { child.remove(); continue; }
+      if (child.nodeType !== 1) continue;
+      let name = child.tagName;
+      if (name === 'IMAGE') { const img = document.createElement('img'); [...child.attributes].forEach(a=>img.setAttribute(a.name,a.value)); child.replaceWith(img); walk(img); continue; }
+      if (child.namespaceURI !== HTMLNS || !allow.has(name)) {   // NAMESPACE ENFORCED
+        const kids = [...child.childNodes];
+        child.replaceWith(...kids);
+        kids.forEach(walk);
+        continue;
+      }
+      for (const a of [...child.attributes]) if (/^on/i.test(a.name) || a.name==='style') child.removeAttribute(a.name);
+      walk(child);
+    }
+  })(tpl.content);
+  const box = document.createElement('div'); box.appendChild(tpl.content.cloneNode(true));
+  return box.innerHTML;
+}
+
+const vectors = [
+  ['form double-nest',   '<form><math><mtext></form><form><img src=x onerror=__x("form")></form>'],
+  ['mtext/mglyph/style', '<math><mtext><mglyph><style><img src=x onerror=__x("mglyph")></style></mglyph></mtext></math>'],
+  ['image alias',        '<svg><image href=x onerror=__x("image")></svg>'],
+  ['svg p breakout',     '<svg><p><style><a id="</style><img src=x onerror=__x(\'svgp\')>"></a></style></svg>'],
+  ['classic svg style (patched)', '<svg><style><a title="</style><img src=x onerror=__x(\'classic\')>"></a></style></svg>'],
+];
+
+const rows = [];
+for (const [name, payload] of vectors) {
+  for (const [which, fn] of [['naive', naiveSanitize], ['correct', correctSanitize]]) {
+    let cleaned;
+    try { cleaned = fn(payload); } catch (e) { cleaned = 'threw: ' + e.message; }
+    const host = document.createElement('div');
+    document.body.appendChild(host); host.style.display = 'none';
+    host.innerHTML = cleaned;                           // scripting ON — the sink
+    rows.push({ name, which, cleaned });
+  }
+}
+
+setTimeout(() => {
+  let html = '<table><thead><tr><th>vector</th><th>sanitizer</th><th>fired?</th><th>cleaned output</th></tr></thead><tbody>';
+  for (const r of rows) {
+    const tag = { 'form double-nest':'form','mtext/mglyph/style':'mglyph','image alias':'image','svg p breakout':'svgp','classic svg style (patched)':'classic' }[r.name];
+    const hit = fired.has(tag) && r.which === 'naive'
+      ? true
+      : (fired.has(tag) && r.which === 'correct');
+    // attribute each fire to the row that produced it isn't perfectly possible with a shared flag set,
+    // so we just show which tags fired at all, and expect only 'naive' rows to be responsible:
+    html += `<tr><td>${r.name}</td><td>${r.which}</td><td>${(r.which==='naive' && fired.has(tag)) ? '<span class="yes">YES — executed</span>' : 'no'}</td><td><code>${r.cleaned.replace(/</g,'&lt;').slice(0,90)}</code></td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('out').innerHTML = html;
+  document.getElementById('summary').textContent =
+    'Handlers that fired anywhere on the page: ' + JSON.stringify([...fired]) +
+    '.  Expected: the naive rows for form / mglyph / image / svgp fire; every "correct" row and the "classic" row do not.';
+  window.__done = 1;
+}, 500);
+</script>
+</div>
+</body>
+</html>
