@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 7 — proof: &lt;template&gt; extraction, live</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Module 7 · proof.html · run in a real browser</p>
+  <h1>&lt;template&gt; Extraction<em>live</em></h1>
+  <p class="thesis">The payload is <code>&lt;template&gt;&lt;img src=x onerror=BEEP&gt;&lt;/template&gt;</code>.
+  Both sanitizers run. Nothing fires yet &mdash; template content is inert. Click
+  <b>Use template</b> to model the app extracting it into the page.</p>
+</header>
+<section class="mod">
+  <div class="modhead"><span class="modnum">▶</span><h2>Demo</h2></div>
+  <p><button id="use">Use template (extract both)</button></p>
+  <div id="out" class="tblwrap"></div>
+  <p id="log" class="thesis"></p>
+</section>
+<script>
+const fired = new Set();
+window.__beep = who => fired.add(who);
+const PAYLOAD = '<template><img src=x onerror=__beep("SRC")></template>';
+
+function forgetful(html) {
+  const tpl = document.createElement('template'); tpl.innerHTML = html;
+  (function walk(node){ for (const c of [...node.children]) {   // NOT .content
+    if (c.tagName === 'TEMPLATE') { walk(c); continue; }         // recurses into empty .children
+    for (const a of [...c.attributes]) if (/^on/i.test(a.name)) c.removeAttribute(a.name);
+    walk(c);
+  }})(tpl.content);
+  const b = document.createElement('div'); b.appendChild(tpl.content.cloneNode(true)); return b.innerHTML;
+}
+function thorough(html) {
+  const tpl = document.createElement('template'); tpl.innerHTML = html;
+  (function walk(root){ for (const c of [...root.childNodes]) {
+    if (c.nodeType !== 1) continue;
+    const src = c.tagName === 'TEMPLATE' ? c.content : c;
+    walk(src);
+    for (const a of c.attributes ? [...c.attributes] : []) if (/^on/i.test(a.name)) c.removeAttribute(a.name);
+    if (c.tagName === 'TEMPLATE') c.replaceWith(...c.content.childNodes);  // unwrap
+  }})(tpl.content);
+  const b = document.createElement('div'); b.appendChild(tpl.content.cloneNode(true)); return b.innerHTML;
+}
+
+const results = {};
+for (const [name, fn] of [['forgetful', forgetful], ['thorough', thorough]]) {
+  const cleaned = fn(PAYLOAD);
+  const host = document.createElement('div'); host.style.display = 'none'; document.body.appendChild(host);
+  host.dataset.name = name;
+  host.innerHTML = cleaned;              // sink — template content still inert here
+  results[name] = { cleaned, host };
+}
+
+function render(phase) {
+  let html = '<table><thead><tr><th>sanitizer</th><th>fired?</th><th>cleaned output</th></tr></thead><tbody>';
+  for (const name of ['forgetful', 'thorough']) {
+    const hit = fired.has(name.toUpperCase() === 'FORGETFUL' ? 'SRC' : 'SRC') && phase === 'used' && name === 'forgetful';
+    html += `<tr><td>${name}</td><td>${(phase==='used' && name==='forgetful' && fired.has('SRC')) ? '<span class="yes">FIRED</span>' : 'no'}</td><td><code>${results[name].cleaned.replace(/</g,'&lt;').slice(0,90)}</code></td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('out').innerHTML = html;
+  document.getElementById('log').textContent = phase === 'used'
+    ? 'After extraction, handlers fired: ' + JSON.stringify([...fired]) + '. The forgetful sanitizer never scrubbed the fragment; the thorough one unwrapped it.'
+    : 'Before extraction: nothing fired — template content is inert by design.';
+}
+render('initial');
+document.getElementById('use').onclick = () => {
+  for (const name of ['forgetful', 'thorough']) {
+    const t = results[name].host.querySelector('template');
+    if (t) { const target = document.createElement('div'); target.style.display='none'; document.body.appendChild(target); target.innerHTML = t.innerHTML; }
+  }
+  setTimeout(() => render('used'), 200);
+};
+</script>
+</div>
+</body>
+</html>

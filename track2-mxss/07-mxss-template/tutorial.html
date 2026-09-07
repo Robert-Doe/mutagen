@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 7 — mXSS via &lt;template&gt; Reparenting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="eyebrow">bob_mXSS · Track 2 · Module 7 of 11 · The Mutation Catalogue</p>
+  <h1>&lt;template&gt; Reparenting<em>the fragment a sanitizer forgets</em></h1>
+  <p class="thesis">A <code>&lt;template&gt;</code>'s content is parsed into a separate,
+  inert <code>DocumentFragment</code>. <code>template.children</code> is empty; the real
+  content is <code>template.content.children</code>. A sanitizer that walks
+  <code>children</code> sees nothing to clean &mdash; and when the app extracts that
+  fragment into the live DOM, everything it skipped runs.</p>
+
+  <div class="therule">
+    <span class="lbl">What this module proves</span>
+    <p><code>forgetfulSanitize('&lt;template&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/template&gt;')</code>
+    returns the payload <span class="hi">with <code>onerror</code> intact</span>, because it
+    never descended into <code>.content</code>. Extract the template &mdash;
+    <span class="hi">live handler</span>.</p>
+  </div>
+</header>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">00</span><h2>Prerequisites</h2></div>
+  <div class="prereqs">
+    <span class="lbl">Read these first</span>
+    <a class="tag" href="../../track1-engine/01-foreign-content-fragment/tutorial.html">Module 1 · Fragment parsing</a>
+    <a class="tag" href="../../prerequisites/prerequisites.html">Prereq 3 · DOM node shape (Document vs DocumentFragment)</a>
+    <a class="tag" href="../../../bob_foster_parenting/track1-core/11_templates_fragments/tutorial.html">Foster Parenting · M11 (template tree mechanics, imported)</a>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">01</span><h2>The Big Analogy</h2></div>
+  <div class="analogy">
+    <p>Some crates arrive at Sekondi marked <code>&lt;template&gt; SAMPLE ONLY &mdash; NOT
+    FOR SALE</code>. The rule: don't inspect them, don't sort them &mdash; they're display
+    samples, they never enter the market. Kofi logs the crate and moves on. He never opens it.</p>
+    <p>Weeks later the shop decides the sample <em>is</em> going on the shelf after all. Nobody
+    re-runs it through customs &mdash; it was already logged. It goes straight to the floor,
+    contents unchecked, because the one time it passed the officer, the officer was told not
+    to look inside.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">02</span><h2>What Happens, Step by Step</h2></div>
+  <div class="spec">
+    <ol>
+      <li>Attacker submits <code>&lt;template&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/template&gt;</code>.</li>
+      <li>Parser: the <code>&lt;img&gt;</code> goes into <code>template.content</code> &mdash;
+      a <code>DocumentFragment</code> hanging off the template, <em>not</em> in
+      <code>template.children</code> and not in the document tree.</li>
+      <li>Sanitizer walks <code>node.children</code> recursively. At the
+      <code>&lt;template&gt;</code> it recurses into <code>template.children</code> &mdash;
+      which is <strong>empty</strong>. It scrubs nothing. It emits the template unchanged.</li>
+      <li>App does <code>const t = box.querySelector('template'); target.innerHTML = t.innerHTML</code>
+      (or <code>target.append(t.content)</code>). The fragment's contents &mdash;
+      <code>&lt;img onerror&gt;</code>, never touched &mdash; are now in the live document.
+      <span class="stamp">XSS</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">03</span><h2>A Map of This Module's State</h2></div>
+  <div class="rail">
+    <div class="railbox"><h4>what a .children walk sees</h4>
+      <pre class="tree">template
+└─ (children: [])   <span class="caret">nothing to clean</span></pre></div>
+    <div class="railbox"><h4>what's actually there</h4>
+      <pre class="tree">template
+└─ #document-fragment (.content)
+   └─ <span class="new">img src="x" onerror="alert(1)"</span></pre></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">04</span><h2>The Code, Explained</h2></div>
+  <pre><code><span class="c">// forgetful — the bug</span>
+const kids = node.children;                 <span class="r">// template.children === []</span>
+
+<span class="c">// thorough — two fixes</span>
+const kids = node.content ? node.content.children : node.children;   <span class="g">// 1. read .content</span>
+if (name === 'template') {                                          <span class="g">// 2. unwrap it entirely —</span>
+  walk(c);                                                          <span class="g">//    hoist the cleaned</span>
+  for (const g of c.content.children) out.push(g);                  <span class="g">//    content, drop the</span>
+  continue;                                                         <span class="g">//    &lt;template&gt; wrapper</span>
+}</code></pre>
+  <p>DOMPurify does both: it walks a <code>NodeIterator</code> that is configured to enter
+  template content, and it removes the <code>&lt;template&gt;</code> tag unless explicitly
+  allowed. <a href="DECISIONS.md">DECISIONS.md</a>; the full hardened version is Module 8.</p>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">05</span><h2>Limits — What You Cannot Do Yet</h2></div>
+  <div class="compare">
+    <div class="cant"><h4>Can't do yet</h4><ul>
+      <li>Beat the thorough sanitizer &mdash; it descends into <code>.content</code> and unwraps</li>
+      <li>Exploit this if the app never extracts the template (rare, but some do keep it inert forever)</li>
+    </ul></div>
+    <div class="can"><h4>Can do</h4><ul>
+      <li>Show the payload surviving a <code>.children</code>-only sanitizer with handler intact</li>
+      <li>Show it going live on template extraction, including nested templates</li>
+      <li>Show the two-line fix</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">06</span><h2>Run It</h2></div>
+  <div class="io">
+    <span class="lab">PowerShell</span>
+    <pre><code>cd C:\Users\bobcumulus\Desktop\RecentInnerDesktop\bob_mXSS\track2-mxss\07-mxss-template
+node test\demo.mjs
+<span class="c"># then open proof.html — the forgetful row fires after "Use template"</span></code></pre>
+    <span class="lab">Expected output</span>
+    <pre><code>MODULE 7 — mXSS via &lt;template&gt; Reparenting
+
+  PASS  template content lands in .content, so a .children walk sees nothing
+  PASS  forgetful sanitizer leaves the onerror INTACT inside the template
+  PASS  ...and when the app extracts the template content, it goes live
+  PASS  thorough sanitizer descends into .content and scrubs the onerror
+  PASS  ...so extraction is safe
+  PASS  thorough sanitizer UNWRAPS &lt;template&gt; entirely
+  PASS  nested templates: forgetful misses every level
+
+  7 passed, 0 failed</code></pre>
+  </div>
+  <div class="callout watch">
+    <span class="ct">Getting a blank or broken result?</span>
+    <p><strong>proof.html "forgetful" row doesn't fire</strong> &mdash; make sure you clicked
+    "Use template" (the extraction step). Before that click, the payload is genuinely inert
+    inside the fragment; that's the whole trick.</p>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">07</span><h2>Brain Exercise</h2></div>
+  <details>
+    <summary>The thorough sanitizer <em>unwraps</em> <code>&lt;template&gt;</code> rather than
+    keeping it and cleaning its content. Why is unwrapping safer than cleaning-in-place?</summary>
+    <p>Because a kept <code>&lt;template&gt;</code> re-introduces the exact gap on the
+    <em>next</em> hop. If the sanitizer's output still contains
+    <code>&lt;template&gt;&hellip;clean content&hellip;&lt;/template&gt;</code>, and that
+    output is later re-sanitised by a <em>different</em> (forgetful) sanitizer, or embedded
+    in a page whose CSP/framework logic treats template content specially, or serialised and
+    re-parsed in a context where template content model differs &mdash; the separate-fragment
+    property is a liability again. Unwrapping collapses it to ordinary, fully-walked nodes
+    with no special parsing context left to exploit. "Remove the thing that makes it special"
+    beats "carefully handle the special thing" &mdash; the same principle as Module 8's
+    forbidden-element list.</p>
+  </details>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">08</span><h2>There Are No Dumb Questions</h2></div>
+  <div class="qa">
+    <div class="qa-item"><div class="q">Q: Is this the same bug as declarative shadow DOM (<code>&lt;template shadowrootmode&gt;</code>)?</div>
+    <div class="a">A: Same family, newer surface. DSD templates are attached as a shadow root
+    during parsing &mdash; a sanitizer that doesn't handle <code>shadowrootmode</code> can
+    leave a whole shadow tree unscrubbed. Forbid the attribute, or use a parser API that
+    doesn't process DSD (the Sanitizer API &mdash; Module 11).</div></div>
+
+    <div class="qa-item"><div class="q">Q: Why does <code>&lt;template&gt;</code> even use a separate fragment?</div>
+    <div class="a">A: So its content can hold otherwise-invalid combinations (a
+    <code>&lt;tr&gt;</code> with no <code>&lt;table&gt;</code>, a bare <code>&lt;td&gt;</code>)
+    without the parser "fixing" them, and so scripts/images/iframes inside don't run or load
+    until the template is used. The inertness is the feature; skipping it during
+    sanitisation is the bug.</div></div>
+
+    <div class="qa-item"><div class="q">Q: Does DOMParser put template content where I expect?</div>
+    <div class="a">A: Yes &mdash; <code>doc.querySelector('template').content</code> is the
+    fragment, in a <code>DOMParser</code> document just as in a live one. The trap is code
+    that reads <code>.innerHTML</code> / <code>.childNodes</code> of the template and assumes
+    that covers it.</div></div>
+  </div>
+</section>
+
+<section class="mod">
+  <div class="modhead"><span class="modnum">09</span><h2>What's Next</h2></div>
+  <p>Five mutation classes, five ways a correct-looking sanitizer ships a dangerous tree.
+  <a href="../08-hardened-sanitizer/tutorial.html">Module 8</a> builds <em>one</em> sanitizer
+  that closes all of them &mdash; the round-trip loop, namespace enforcement, template
+  unwrapping, a forbidden list &mdash; and reads it line by line against the real DOMPurify
+  source.</p>
+</section>
+
+<div class="modnav">
+  <span><span class="dir">Prev</span><a href="../06-mxss-attributes/tutorial.html">Module 6 · Attributes</a></span>
+  <span class="next"><span class="dir">Next</span><a href="../08-hardened-sanitizer/tutorial.html">Module 8 · The hardened sanitizer &rarr;</a></span>
+</div>
+
+<div class="colophon">
+  <h3>Colophon</h3>
+  <p>Source: <code>src/template.mjs</code>, <code>proof.html</code>. Rationale:
+  <a href="DECISIONS.md">DECISIONS.md</a>. Citations: <a href="../../REFERENCES.md">REFERENCES.md</a>
+  [R4], [R12], [S2].</p>
+  <p><strong>Provenance:</strong> new for bob_mXSS, 2026-09-07. Template-content placement and
+  the "fires after extraction" result verified against Chrome 148.</p>
+</div>
+
+</div>
+</body>
+</html>
