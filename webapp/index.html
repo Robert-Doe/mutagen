@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mutagen — Mutation XSS Visualizer</title>
+  <meta name="description" content="A real, from-scratch HTML engine demonstrates mutation XSS: sanitize a payload, then watch the cleaned output go live again on reparse — safely, inside a sandboxed iframe." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="grid-bg"></div>
+
+  <div class="topbar">
+    <div class="topbar-brand">Mutagen</div>
+    <nav class="topbar-links">
+      <a href="https://github.com/Robert-Doe/mutagen" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://robertdoe.com" target="_blank" rel="noopener">← robertdoe.com</a>
+    </nav>
+  </div>
+
+  <header class="hero">
+    <h1>Mutagen</h1>
+    <p class="tagline">
+      Mutation XSS, made visible. Sanitize a payload with a real DOM-walking
+      sanitizer, then watch the browser turn the "cleaned" output dangerous
+      again on the very next parse.
+    </p>
+  </header>
+
+  <main class="demo">
+    <section class="pane card">
+      <div class="pane-head">
+        <span class="pane-num">1</span>
+        <h2>Sanitize</h2>
+      </div>
+
+      <label class="field-label" for="example-select">Verified example (from the engine's test suite)</label>
+      <select id="example-select" class="select"></select>
+
+      <label class="field-label" for="input">HTML / SVG snippet</label>
+      <textarea id="input" class="textarea" spellcheck="false"></textarea>
+
+      <label class="field-label" for="sanitizer-select">Sanitizer</label>
+      <select id="sanitizer-select" class="select">
+        <option value="naive">Naive DOM sanitizer (buggy — mutates while iterating, no namespace check)</option>
+        <option value="correct">Hardened DOM sanitizer (snapshot + namespace check + &lt;image&gt; fix)</option>
+      </select>
+
+      <button id="btn-sanitize" class="btn btn-primary">Sanitize →</button>
+
+      <label class="field-label" style="margin-top:16px">Cleaned output (what the sanitizer approved)</label>
+      <pre id="cleaned-output" class="code-panel">—</pre>
+
+      <div id="static-verdict" class="verdict verdict-idle">Run the sanitizer to see its verdict.</div>
+    </section>
+
+    <section class="pane card">
+      <div class="pane-head">
+        <span class="pane-num">2</span>
+        <h2>Re-parse</h2>
+      </div>
+      <p class="pane-note">
+        The cleaned string above is fed to a real browser parser inside a
+        sandboxed <code>&lt;iframe sandbox="allow-scripts"&gt;</code> (no
+        <code>allow-same-origin</code>) — this is <code>parse(serialize(parse(x)))</code>,
+        for real, isolated from this page.
+      </p>
+
+      <button id="btn-reparse" class="btn btn-primary" disabled>Re-parse in sandbox →</button>
+
+      <div id="sandbox-holder" class="sandbox-holder"></div>
+
+      <div id="live-verdict" class="verdict verdict-idle">Sanitize first, then re-parse.</div>
+
+      <label class="field-label" style="margin-top:12px">Sandbox event log</label>
+      <pre id="log-panel" class="code-panel log-panel">—</pre>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>
+      100% client-side. No backend, no storage, nothing you type here is ever
+      sent anywhere or logged. All parsing/sanitizing runs in this tab; any
+      code from your input that actually executes does so inside a sandboxed,
+      cross-origin <code>iframe</code> with scripts allowed and everything
+      else denied. This is an educational visualizer, not a security scanner —
+      it demonstrates one real, engine-verified mXSS mechanism, not a general
+      sanitizer audit.
+    </p>
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

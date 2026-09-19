@@ -20,3 +20,7 @@ __pycache__/
 
 # Logs
 *.log
+
+# webapp (Vite demo)
+webapp/node_modules/
+webapp/dist/
