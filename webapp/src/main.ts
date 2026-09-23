@@ -1,6 +1,6 @@
 import './style.css';
 
-// Real engine code, reused (not reimplemented) — see webapp/src/engine/*.mjs
+// Real engine code, reused (not reimplemented), see webapp/src/engine/*.mjs
 // provenance headers for exact source paths.
 // @ts-ignore - plain .mjs, no type declarations
 import { parseFragment, hasLiveHandler } from './engine/lab.mjs';
@@ -25,17 +25,17 @@ const logPanel = document.getElementById('log-panel') as HTMLElement;
 vectors.forEach((v, i) => {
   const opt = document.createElement('option');
   opt.value = String(i);
-  opt.textContent = `${v.name} — ${v.flaw}`;
+  opt.textContent = `${v.name}, ${v.flaw}`;
   exampleSelect.appendChild(opt);
 });
 // "mtext/mglyph/style" is the default: its naive-sanitizer output keeps a
 // real `<img src=x onerror=alert(1)>` (not `href=`), so the sandboxed
 // re-parse step below causes an ACTUAL failed image load and an ACTUAL
-// onerror call in the real browser engine — not just the toy engine's
+// onerror call in the real browser engine, not just the toy engine's
 // static prediction. ("image alias" is also a genuine, verified bypass of
 // the naive sanitizer, but its `<image href=...>` only matches HTML's
 // `<img src=...>` load attribute after the tag-name correction, not the
-// attribute name, so it won't itself trigger a network fetch here — it's
+// attribute name, so it won't itself trigger a network fetch here, it's
 // still offered in the dropdown for the tag-aliasing lesson.)
 const DEFAULT_VECTOR_INDEX = vectors.findIndex((v) => v.name === 'mtext/mglyph/style');
 exampleSelect.value = String(DEFAULT_VECTOR_INDEX >= 0 ? DEFAULT_VECTOR_INDEX : 0);
@@ -47,10 +47,10 @@ exampleSelect.addEventListener('change', () => {
 });
 
 function resetOutputs() {
-  cleanedOutput.textContent = '—';
+  cleanedOutput.textContent = 'n/a';
   setVerdict(staticVerdict, 'idle', 'Run the sanitizer to see its verdict.');
   setVerdict(liveVerdict, 'idle', 'Sanitize first, then re-parse.');
-  logPanel.textContent = '—';
+  logPanel.textContent = 'n/a';
   btnReparse.disabled = true;
   sandboxHolder.innerHTML = '';
 }
@@ -72,7 +72,7 @@ btnSanitize.addEventListener('click', () => {
     cleaned = `[sanitizer threw: ${(e as Error).message}]`;
   }
   lastCleaned = cleaned;
-  cleanedOutput.textContent = cleaned || '(empty — everything was stripped)';
+  cleanedOutput.textContent = cleaned || '(empty, everything was stripped)';
 
   // static prediction, using the same real engine's parser + probe the attack
   // modules use (hasLiveHandler), on the browser's would-be reparse.
@@ -97,8 +97,8 @@ btnSanitize.addEventListener('click', () => {
     );
   }
 
-  setVerdict(liveVerdict, 'idle', 'Ready — click "Re-parse in sandbox" to prove it in a real browser.');
-  logPanel.textContent = '—';
+  setVerdict(liveVerdict, 'idle', 'Ready, click "Re-parse in sandbox" to prove it in a real browser.');
+  logPanel.textContent = 'n/a';
   sandboxHolder.innerHTML = '';
   btnReparse.disabled = false;
 });
@@ -107,7 +107,7 @@ btnSanitize.addEventListener('click', () => {
 // The cleaned string is handed to a REAL browser parser, isolated in an
 // <iframe sandbox="allow-scripts"> (no allow-same-origin) via srcdoc. If the
 // payload's handler is still live, its own script call (e.g. the literal
-// `alert(1)` the payload tries to run) is what proves it — we only intercept
+// `alert(1)` the payload tries to run) is what proves it, we only intercept
 // window.alert/onerror inside that sandboxed frame so a hosted demo can't pop
 // a real dialog, and relay the fact that it fired back via postMessage.
 function buildSrcdoc(cleanedHtml: string): string {
@@ -120,8 +120,8 @@ function buildSrcdoc(cleanedHtml: string): string {
   var reported = [];
   // "dangerous" kinds are proof that INJECTED SCRIPT actually ran (the
   // payload's own alert(1) call, or a thrown JS exception). A plain resource
-  // load failure (e.g. an <img> whose src 404s) is NOT proof of anything —
-  // every broken image fires one, sanitized or not — so it is logged for
+  // load failure (e.g. an <img> whose src 404s) is NOT proof of anything,
+  // every broken image fires one, sanitized or not, so it is logged for
   // transparency but never counted as a live mutation on its own.
   function report(kind, detail, dangerous) {
     reported.push({ kind: kind, detail: String(detail), dangerous: !!dangerous });
@@ -135,7 +135,7 @@ function buildSrcdoc(cleanedHtml: string): string {
     if (e && e.target === window) {
       report('script-exception', e.message || 'an uncaught script exception occurred', true);
     } else {
-      report('resource-error', 'a resource (e.g. the img src) failed to load — expected, not a mutation', false);
+      report('resource-error', 'a resource (e.g. the img src) failed to load, expected, not a mutation', false);
     }
   }, true);
   window.onerror = function (msg) { report('script-exception', msg, true); return true; };
@@ -174,11 +174,11 @@ btnReparse.addEventListener('click', () => {
     if (settled) return;
     settled = true;
     window.removeEventListener('message', onMessage);
-    logPanel.textContent = events.length ? events.join('\n') : '(no events reported — nothing executed)';
+    logPanel.textContent = events.length ? events.join('\n') : '(no events reported, nothing executed)';
     if (fired) {
-      setVerdict(liveVerdict, 'danger', 'MUTATION FIRED — the sanitized output executed on reparse.');
+      setVerdict(liveVerdict, 'danger', 'MUTATION FIRED, the sanitized output executed on reparse.');
     } else {
-      setVerdict(liveVerdict, 'safe', 'BLOCKED — nothing executed on reparse.');
+      setVerdict(liveVerdict, 'safe', 'BLOCKED, nothing executed on reparse.');
     }
   }
 
